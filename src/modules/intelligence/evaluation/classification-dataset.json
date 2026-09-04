@@ -1,0 +1,21 @@
+[
+  {
+    "description": "AC is cooling but making loud noise",
+    "expectedCategory": "AC & Cooling",
+    "expectedUrgency": "NORMAL"
+  },
+  {
+    "description": "Water leaking under kitchen sink",
+    "expectedCategory": "Plumbing",
+    "expectedUrgency": "HIGH"
+  },
+  {
+    "description": "I smell gas in the kitchen",
+    "expectedCategory": "Safety Emergency",
+    "expectedUrgency": "EMERGENCY"
+  },
+  {
+    "description": "something wrong",
+    "expectedConfidenceLevel": "LOW"
+  }
+]

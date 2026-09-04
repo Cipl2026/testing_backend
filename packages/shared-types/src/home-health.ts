@@ -1,0 +1,72 @@
+export enum HomeType {
+  APARTMENT = 'APARTMENT',
+  INDEPENDENT_HOUSE = 'INDEPENDENT_HOUSE',
+  VILLA = 'VILLA',
+  OTHER = 'OTHER',
+}
+
+export enum RoomType {
+  KITCHEN = 'KITCHEN',
+  BEDROOM = 'BEDROOM',
+  BATHROOM = 'BATHROOM',
+  LIVING_ROOM = 'LIVING_ROOM',
+  DINING_ROOM = 'DINING_ROOM',
+  GARAGE = 'GARAGE',
+  BALCONY = 'BALCONY',
+  OTHER = 'OTHER',
+}
+
+export enum AssetCondition {
+  GOOD = 'GOOD',
+  FAIR = 'FAIR',
+  POOR = 'POOR',
+  UNKNOWN = 'UNKNOWN',
+}
+
+export enum AssetHealthStatus {
+  UNKNOWN = 'UNKNOWN',
+  GOOD = 'GOOD',
+  MAINTENANCE_DUE = 'MAINTENANCE_DUE',
+  WARRANTY_EXPIRING = 'WARRANTY_EXPIRING',
+  ATTENTION_NEEDED = 'ATTENTION_NEEDED',
+}
+
+export enum HomeHealthOverallStatus {
+  GOOD = 'GOOD',
+  NEEDS_ATTENTION = 'NEEDS_ATTENTION',
+}
+
+export enum InsightType {
+  MAINTENANCE_DUE = 'MAINTENANCE_DUE',
+  WARRANTY_EXPIRING = 'WARRANTY_EXPIRING',
+  LONG_UNSERVICED = 'LONG_UNSERVICED',
+  REPEATED_REPAIRS = 'REPEATED_REPAIRS',
+}
+
+export enum WarrantyType {
+  MANUFACTURER = 'MANUFACTURER',
+  EXTENDED = 'EXTENDED',
+  OTHER = 'OTHER',
+}
+
+export enum WarrantyStatus {
+  ACTIVE = 'ACTIVE',
+  EXPIRING = 'EXPIRING',
+  EXPIRED = 'EXPIRED',
+  VOID = 'VOID',
+}
+
+export enum MaintenanceScheduleStatus {
+  UPCOMING = 'UPCOMING',
+  DUE = 'DUE',
+  OVERDUE = 'OVERDUE',
+  COMPLETED = 'COMPLETED',
+  SKIPPED = 'SKIPPED',
+}
+
+export enum MaintenancePriority {
+  LOW = 'LOW',
+  NORMAL = 'NORMAL',
+  HIGH = 'HIGH',
+}
+","path":"/Users/deependrakumar/Downloads/Ghaarfix/server/shared-types/src/home-health.ts"}},{"type":"tool_use","name":"Write","input":{"contents":"

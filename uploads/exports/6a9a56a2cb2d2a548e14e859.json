@@ -1,0 +1,125 @@
+{
+  "exportedAt": "2026-09-04T05:26:58.506Z",
+  "profile": {
+    "user": {
+      "id": "6a99b007933d7a7bdf811564",
+      "role": "CUSTOMER",
+      "fullName": "Deep",
+      "createdAt": "2026-09-03T17:36:07.675Z"
+    },
+    "customerProfile": {
+      "_id": "6a99b007933d7a7bdf811566",
+      "userId": "6a99b007933d7a7bdf811564",
+      "fullName": "Deep",
+      "email": "deep@gmail.com",
+      "createdAt": "2026-09-03T17:36:07.711Z",
+      "updatedAt": "2026-09-03T23:08:21.727Z",
+      "__v": 0,
+      "defaultAddressId": "6a99df2c01e9aadf36244c6e",
+      "profileImage": "/api/v1/files/customers/profile/b48d0ebd-b4e8-4e44-b39b-fd0e9040abe2.jpg",
+      "dateOfBirth": "2002-10-11T00:00:00.000Z"
+    }
+  },
+  "bookings": [
+    {
+      "id": "6a99db1e01e9aadf3624403f",
+      "bookingNumber": "GF-20260904-429B",
+      "status": "CANCELLED",
+      "serviceName": "AC Cooling Repair",
+      "createdAt": "2026-09-03T20:39:58.263Z"
+    },
+    {
+      "id": "6a99de2101e9aadf36244976",
+      "bookingNumber": "GF-20260904-941C",
+      "status": "CANCELLED",
+      "serviceName": "Fan Repair",
+      "createdAt": "2026-09-03T20:52:49.278Z"
+    },
+    {
+      "id": "6a99e46514970337f660874f",
+      "bookingNumber": "GF-20260904-0D76",
+      "status": "CANCELLED",
+      "serviceName": "AC Cooling Repair",
+      "createdAt": "2026-09-03T21:19:33.500Z"
+    },
+    {
+      "id": "6a99e955bfd17368cfb62ff4",
+      "bookingNumber": "GF-20260904-14B1",
+      "status": "CANCELLED",
+      "serviceName": "AC Cooling Repair",
+      "createdAt": "2026-09-03T21:40:37.894Z"
+    },
+    {
+      "id": "6a99eb32bfd17368cfb638b6",
+      "bookingNumber": "GF-20260904-3AA1",
+      "status": "CANCELLED",
+      "serviceName": "AC Cooling Repair",
+      "createdAt": "2026-09-03T21:48:34.317Z"
+    },
+    {
+      "id": "6a99ebdbbfd17368cfb63d13",
+      "bookingNumber": "GF-20260904-8689",
+      "status": "CANCELLED",
+      "serviceName": "AC Cooling Repair",
+      "createdAt": "2026-09-03T21:51:23.302Z"
+    },
+    {
+      "id": "6a9a0049fca2792273aaa0b1",
+      "bookingNumber": "GF-20260904-5938",
+      "status": "PENDING_PROVIDER",
+      "serviceName": "AC Cooling Repair",
+      "createdAt": "2026-09-03T23:18:33.733Z"
+    },
+    {
+      "id": "6a9a0a5ffca2792273aae910",
+      "bookingNumber": "GF-20260904-97B5",
+      "status": "PENDING_PROVIDER",
+      "serviceName": "AC Cooling Repair",
+      "createdAt": "2026-09-04T00:01:35.413Z"
+    },
+    {
+      "id": "6a9a16224f208285de46f51b",
+      "bookingNumber": "GF-20260904-0723",
+      "status": "COMPLETED",
+      "serviceName": "Split AC Service",
+      "createdAt": "2026-09-04T00:51:46.214Z"
+    },
+    {
+      "id": "6a9a16224f208285de46f527",
+      "bookingNumber": "GF-20260904-E041",
+      "status": "COMPLETED",
+      "serviceName": "Tap Repair",
+      "createdAt": "2026-09-04T00:51:46.755Z"
+    },
+    {
+      "id": "6a9a16234f208285de46f531",
+      "bookingNumber": "GF-20260904-2B0D",
+      "status": "COMPLETED",
+      "serviceName": "Fan Repair",
+      "createdAt": "2026-09-04T00:51:47.181Z"
+    },
+    {
+      "id": "6a9a16234f208285de46f53b",
+      "bookingNumber": "GF-20260904-633F",
+      "status": "COMPLETED",
+      "serviceName": "Pipe Leakage Repair",
+      "createdAt": "2026-09-04T00:51:47.645Z"
+    }
+  ],
+  "consents": [
+    {
+      "_id": "6a9a569f3d95c3be61b8e175",
+      "userId": "6a99b007933d7a7bdf811564",
+      "consentType": "OPTIONAL_PERSONALIZATION",
+      "__v": 0,
+      "createdAt": "2026-09-04T05:26:55.220Z",
+      "grantedAt": "2026-09-04T05:26:55.220Z",
+      "purpose": "Optional service personalization",
+      "source": "app",
+      "status": "GRANTED",
+      "updatedAt": "2026-09-04T05:26:55.220Z",
+      "version": "1.0",
+      "withdrawnAt": null
+    }
+  ]
+}

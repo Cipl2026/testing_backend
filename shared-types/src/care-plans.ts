@@ -1,0 +1,103 @@
+/** Phase 12 — GhaarFix Care Plan Platform */
+
+export enum SubscriptionPlanStatus {
+  DRAFT = 'DRAFT',
+  ACTIVE = 'ACTIVE',
+  ARCHIVED = 'ARCHIVED',
+}
+
+export enum PlanScopeType {
+  CUSTOMER = 'CUSTOMER',
+  HOME = 'HOME',
+  MULTI_HOME = 'MULTI_HOME',
+  FAMILY = 'FAMILY',
+}
+
+export enum BillingInterval {
+  MONTHLY = 'MONTHLY',
+  YEARLY = 'YEARLY',
+}
+
+export enum PlanBenefitType {
+  SERVICE_CREDIT = 'SERVICE_CREDIT',
+  DISCOUNT = 'DISCOUNT',
+  PRIORITY_BOOKING = 'PRIORITY_BOOKING',
+  FREE_VISIT = 'FREE_VISIT',
+  MAINTENANCE_COVERAGE = 'MAINTENANCE_COVERAGE',
+  URGENT_FEE_WAIVER = 'URGENT_FEE_WAIVER',
+  SUPPORT_PRIORITY = 'SUPPORT_PRIORITY',
+}
+
+export enum BenefitPeriod {
+  MONTHLY = 'MONTHLY',
+  YEARLY = 'YEARLY',
+  PER_SUBSCRIPTION = 'PER_SUBSCRIPTION',
+}
+
+export enum EntitlementStatus {
+  ACTIVE = 'ACTIVE',
+  EXHAUSTED = 'EXHAUSTED',
+  EXPIRED = 'EXPIRED',
+  SUSPENDED = 'SUSPENDED',
+}
+
+export enum EntitlementOwnerType {
+  CUSTOMER = 'CUSTOMER',
+  HOME = 'HOME',
+}
+
+export enum EntitlementUsageStatus {
+  RESERVED = 'RESERVED',
+  CONSUMED = 'CONSUMED',
+  RELEASED = 'RELEASED',
+}
+
+export enum SubscriptionStatus {
+  PENDING = 'PENDING',
+  ACTIVE = 'ACTIVE',
+  PAST_DUE = 'PAST_DUE',
+  PAUSED = 'PAUSED',
+  CANCELLED = 'CANCELLED',
+  EXPIRED = 'EXPIRED',
+}
+
+export enum SubscriptionHomeStatus {
+  ACTIVE = 'ACTIVE',
+  REMOVED = 'REMOVED',
+}
+
+export enum SubscriptionInvoiceStatus {
+  DRAFT = 'DRAFT',
+  OPEN = 'OPEN',
+  PAID = 'PAID',
+  FAILED = 'FAILED',
+  VOID = 'VOID',
+}
+
+export enum SubscriptionPaymentAttemptStatus {
+  PENDING = 'PENDING',
+  SUCCEEDED = 'SUCCEEDED',
+  FAILED = 'FAILED',
+}
+
+export enum SubscriptionChangeType {
+  UPGRADE = 'UPGRADE',
+  DOWNGRADE = 'DOWNGRADE',
+  PAUSE = 'PAUSE',
+  RESUME = 'RESUME',
+  CANCEL = 'CANCEL',
+  ADMIN_CHANGE = 'ADMIN_CHANGE',
+}
+
+export enum CarePlanAnalyticsEvent {
+  PLAN_VIEWED = 'PLAN_VIEWED',
+  PLAN_COMPARED = 'PLAN_COMPARED',
+  PLAN_SELECTED = 'PLAN_SELECTED',
+  SUBSCRIPTION_STARTED = 'SUBSCRIPTION_STARTED',
+  SUBSCRIPTION_PAYMENT_FAILED = 'SUBSCRIPTION_PAYMENT_FAILED',
+  SUBSCRIPTION_RENEWED = 'SUBSCRIPTION_RENEWED',
+  SUBSCRIPTION_CANCELLED = 'SUBSCRIPTION_CANCELLED',
+  ENTITLEMENT_VIEWED = 'ENTITLEMENT_VIEWED',
+  ENTITLEMENT_APPLIED = 'ENTITLEMENT_APPLIED',
+  ENTITLEMENT_CONSUMED = 'ENTITLEMENT_CONSUMED',
+}

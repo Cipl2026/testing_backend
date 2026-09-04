@@ -1,0 +1,53 @@
+import { ProviderStatus, UserRole, ErrorCode } from '@ghaarfix/shared-types';
+import { ProviderProfile } from '@/models/ProviderProfile.js';
+import { User } from '@/models/User.js';
+import { AppError } from '@/utils/AppError.js';
+import { serializeUser } from '@/utils/serializers.js';
+import type { ProviderProfileInput } from '@/validators/auth.js';
+
+export async function updateProviderProfile(userId: string, input: ProviderProfileInput) {
+  const user = await User.findById(userId);
+  if (!user || user.role !== UserRole.PROVIDER) {
+    throw new AppError('Provider profile not found.', 404, ErrorCode.NOT_FOUND);
+  }
+
+  const update: Record<string, unknown> = {};
+  if (input.fullName !== undefined) update.fullName = input.fullName;
+  if (input.email !== undefined) update.email = input.email || undefined;
+  if (input.profileImage !== undefined) update.profileImage = input.profileImage;
+  if (input.dateOfBirth !== undefined) update.dateOfBirth = new Date(input.dateOfBirth);
+  if (input.gender !== undefined) update.gender = input.gender;
+  if (input.experienceYears !== undefined) update.experienceYears = input.experienceYears;
+  if (input.bio !== undefined) update.bio = input.bio;
+  if (input.languages !== undefined) update.languages = input.languages;
+
+  const profile = await ProviderProfile.findOneAndUpdate(
+    { userId: user._id },
+    update,
+    { new: true, upsert: true },
+  );
+
+  const isComplete = Boolean(
+    profile.fullName &&
+      profile.fullName.trim().length >= 2 &&
+      profile.experienceYears !== undefined &&
+      profile.languages.length > 0,
+  );
+
+  profile.isProfileComplete = isComplete;
+  profile.providerStatus = ProviderStatus.PENDING;
+  await profile.save();
+
+  user.fullName = profile.fullName;
+  user.email = profile.email;
+  user.profileImage = profile.profileImage;
+  user.isProfileComplete = isComplete;
+  await user.save();
+
+  return serializeUser(user, profile);
+}
+
+export async function getProviderProfile(userId: string) {
+  const profile = await ProviderProfile.findOne({ userId });
+  return profile;
+}
