@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import {
+  BLOCKING_BOOKING_STATUSES,
   ErrorCode,
   UrgentDispatchTargetStatus,
   UrgentRequestStatus,
@@ -16,8 +17,11 @@ import {
   emitToAdmin,
 } from '@/modules/realtime/socket.service.js';
 import { convertUrgentToBooking } from '@/modules/urgent/urgent.service.js';
-import { stopUrgentSearchWaves } from '@/modules/urgent/urgent-wave.service.js';
+import { continueUrgentSearchAfterReject, stopUrgentSearchWaves } from '@/modules/urgent/urgent-wave.service.js';
 import { setProviderBusy } from '@/modules/presence/presence.service.js';
+import { env } from '@/config/env.js';
+import { Booking } from '@/models/Booking.js';
+import { logger } from '@/utils/logger.js';
 import { AppError } from '@/utils/AppError.js';
 import {
   serializeProviderUrgentTarget,
@@ -108,6 +112,25 @@ export async function acceptUrgentRequest(providerId: string, urgentRequestId: s
     throw new AppError('You are not eligible for this urgent request.', 403, ErrorCode.FORBIDDEN);
   }
 
+  // Double-booking protection (backend-authoritative): the provider may have taken
+  // another job after this offer was created. Re-validate right before the claim.
+  const activeJobCount = await Booking.countDocuments({
+    providerId,
+    status: { $in: BLOCKING_BOOKING_STATUSES },
+  });
+  if (activeJobCount >= env.urgent.maxActiveJobsPerProvider) {
+    target.status = UrgentDispatchTargetStatus.REJECTED;
+    target.respondedAt = new Date();
+    await target.save();
+    logger.info('urgent offer rejected: provider busy', {
+      urgentRequestId,
+      providerId,
+      activeJobCount,
+    });
+    void continueUrgentSearchAfterReject(urgentRequestId);
+    throw new AppError('You already have an active job.', 409, ErrorCode.CONFLICT);
+  }
+
   const claimed = await UrgentRequest.findOneAndUpdate(
     {
       _id: urgentRequestId,
@@ -143,6 +166,11 @@ export async function acceptUrgentRequest(providerId: string, urgentRequestId: s
   target.status = UrgentDispatchTargetStatus.ACCEPTED;
   target.respondedAt = new Date();
   await target.save();
+  logger.info('urgent offer accepted', {
+    urgentRequestId,
+    providerId,
+    bookingId: claimed._id.toString(),
+  });
 
   await UrgentDispatchTarget.updateMany(
     {
@@ -218,5 +246,7 @@ export async function rejectUrgentRequest(
   target.status = UrgentDispatchTargetStatus.REJECTED;
   target.respondedAt = new Date();
   await target.save();
+
+  await continueUrgentSearchAfterReject(urgentRequestId);
   return { success: true, reason };
 }

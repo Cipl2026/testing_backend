@@ -3,12 +3,14 @@ import {
   ProviderPresenceStatus,
   ProviderServiceApprovalStatus,
   ProviderStatus,
+  UrgentDispatchTargetStatus,
   UrgentRequestStatus,
 } from '@ghaarfix/shared-types';
 import { Booking } from '@/models/Booking.js';
 import { ProviderPresence } from '@/models/ProviderPresence.js';
 import { ProviderProfile } from '@/models/ProviderProfile.js';
 import { ProviderService } from '@/models/ProviderService.js';
+import { UrgentDispatchTarget } from '@/models/UrgentDispatchTarget.js';
 import { UrgentRequest } from '@/models/UrgentRequest.js';
 import { User } from '@/models/User.js';
 import { getTimeOffInRange } from '@/modules/provider-availability/time-off.service.js';
@@ -61,37 +63,43 @@ async function isProviderBusy(providerId: string): Promise<boolean> {
  * 6. Return top maxBroadcastProviders
  */
 /**
- * Progressive geo search: start at 25% of max radius, expand until candidates found or max reached.
+ * Geo search for online presences within maxDistanceMeters.
+ *
+ * NOTE: We always scan the FULL radius (step 1.0) rather than early-returning at
+ * a smaller ring. The old progressive early-return was a micro-optimization for
+ * serial 1-by-1 dispatch, but batch dispatch needs the complete candidate pool
+ * within the radius — otherwise providers in the 25%-100% annulus get missed.
  */
 async function findNearbyPresences(
   coordinates: [number, number],
   maxDistanceMeters: number,
   stalePresenceCutoff: Date,
   staleLocationCutoff: Date,
-  minResults = 5,
 ) {
   const [lng, lat] = coordinates;
-  const radiusSteps = [0.25, 0.5, 0.75, 1.0];
-  for (const step of radiusSteps) {
-    const stepMeters = maxDistanceMeters * step;
-    const presences = await ProviderPresence.find({
-      isOnline: true,
-      urgentAvailable: true,
-      status: ProviderPresenceStatus.ONLINE,
-      lastSeenAt: { $gte: stalePresenceCutoff },
-      locationUpdatedAt: { $gte: staleLocationCutoff },
-      currentLocation: {
-        $nearSphere: {
-          $geometry: { type: 'Point', coordinates: [lng, lat] },
-          $maxDistance: stepMeters,
-        },
+  return ProviderPresence.find({
+    isOnline: true,
+    urgentAvailable: true,
+    status: ProviderPresenceStatus.ONLINE,
+    lastSeenAt: { $gte: stalePresenceCutoff },
+    locationUpdatedAt: { $gte: staleLocationCutoff },
+    currentLocation: {
+      $nearSphere: {
+        $geometry: { type: 'Point', coordinates: [lng, lat] },
+        $maxDistance: maxDistanceMeters,
       },
-    }).limit(100);
-    if (presences.length >= minResults || step === 1.0) {
-      return presences;
-    }
-  }
-  return [];
+    },
+  }).limit(100);
+}
+
+async function getRecentlyOfferedProviderIds(cooldownMs: number): Promise<Set<string>> {
+  if (cooldownMs <= 0) return new Set();
+  const cutoff = new Date(Date.now() - cooldownMs);
+  const targets = await UrgentDispatchTarget.find({
+    notifiedAt: { $gte: cutoff },
+    status: { $in: [UrgentDispatchTargetStatus.NOTIFIED, UrgentDispatchTargetStatus.VIEWED, UrgentDispatchTargetStatus.PENDING] },
+  }).select('providerId').lean();
+  return new Set(targets.map((t) => t.providerId.toString()));
 }
 
 export async function matchUrgentProviders(input: {
@@ -121,12 +129,18 @@ export async function matchUrgentProviders(input: {
     maxDistanceMeters,
     stalePresenceCutoff,
     staleLocationCutoff,
-    1,
   );
 
   if (!presences.length) return [];
 
   const exclude = new Set(input.excludeProviderIds ?? []);
+  // Cross-request offer rate limiting: a provider who already received an urgent
+  // offer (for ANY request) within the retry cooldown must not be spammed again.
+  const recentlyOffered = await getRecentlyOfferedProviderIds(
+    env.urgent.retryCooldownSeconds * 1000,
+  );
+  recentlyOffered.forEach((id) => exclude.add(id));
+
   const providerIds = presences
     .map((p) => p.providerId.toString())
     .filter((id) => !exclude.has(id));
@@ -282,6 +296,8 @@ export async function matchOfflineUrgentProviders(input: {
   for (const providerId of providerIds) {
     if (!activeUserIds.has(providerId)) continue;
     if (!activeProfileIds.has(providerId)) continue;
+    // Offline/background providers only receive offers via push — skip those
+    // without a valid push token.
     if (!withPush.has(providerId)) continue;
     if (onlineNow.has(providerId)) continue;
 

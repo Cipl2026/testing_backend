@@ -24,13 +24,19 @@ import { UrgentRequest } from '@/models/UrgentRequest.js';
 import { addTimelineEvent } from '@/modules/bookings/timeline.service.js';
 import { calculateJobPricing, calculateUrgentSurcharge } from '@/modules/bookings/booking-pricing.service.js';
 import { initialPaymentStatus } from '@/modules/payments/payment-gateway.js';
+import { createNotification } from '@/modules/notifications/notification.service.js';
 import {
+  emitBookingStatusChanged,
   emitUrgentCancelled,
   emitUrgentExpired,
   emitUrgentRequestClosed,
+  emitUrgentSearching,
+  emitToAdmin,
+  emitToProvider,
 } from '@/modules/realtime/socket.service.js';
 import { startUrgentSearchWaves, stopUrgentSearchWaves } from '@/modules/urgent/urgent-wave.service.js';
 import { AppError } from '@/utils/AppError.js';
+import { logger } from '@/utils/logger.js';
 import { generateBookingNumber } from '@/utils/bookingNumber.js';
 import {
   serializeUrgentRequestDetail,
@@ -66,7 +72,7 @@ function resolveUrgentConfig(service: {
         config.maxBroadcastProviders ?? DEFAULT_URGENT_CONFIG.maxBroadcastProviders,
     };
   }
-  return DEFAULT_URGENT_CONFIG;
+  return { ...DEFAULT_URGENT_CONFIG, enabled: false };
 }
 
 function calculateUrgentPricing(
@@ -125,6 +131,13 @@ export async function createUrgentRequest(
 
   if (!service) {
     throw new AppError('Service not found.', 404, ErrorCode.NOT_FOUND);
+  }
+  if (!service.isUrgentAvailable || !service.urgentConfig?.enabled) {
+    throw new AppError(
+      'Urgent service is not available for this service.',
+      400,
+      ErrorCode.VALIDATION_ERROR,
+    );
   }
   const urgentConfig = resolveUrgentConfig(service);
   if (!address) throw new AppError('Address not found.', 404, ErrorCode.NOT_FOUND);
@@ -247,6 +260,11 @@ export async function cancelUrgentRequest(customerId: string, requestId: string,
   }
 
   stopUrgentSearchWaves(requestId);
+  logger.info('urgent search cancelled by customer', {
+    urgentRequestId: cancelled._id.toString(),
+    customerId,
+    reason: reason ?? null,
+  });
 
   await UrgentDispatchTarget.updateMany(
     { urgentRequestId: cancelled._id, status: { $nin: [UrgentDispatchTargetStatus.REJECTED] } },
@@ -273,6 +291,7 @@ export async function expireUrgentRequests(): Promise<number> {
   }).limit(50);
 
   for (const request of expired) {
+    stopUrgentSearchWaves(request._id.toString());
     request.status = UrgentRequestStatus.EXPIRED;
     await request.save();
     await UrgentDispatchTarget.updateMany(
@@ -399,4 +418,113 @@ export async function convertUrgentToBooking(
   await request.save();
 
   return booking;
+}
+
+const URGENT_REDEPLOY_STATUSES: BookingStatus[] = [
+  BookingStatus.CONFIRMED,
+  BookingStatus.PROVIDER_EN_ROUTE,
+];
+
+/**
+ * When a provider cancels an accepted urgent job before service starts,
+ * cancel the booking and restart dispatch for the original urgent request.
+ */
+export async function restartUrgentDispatchAfterProviderCancel(
+  bookingId: string,
+  providerId: string,
+  reason: string,
+) {
+  const booking = await Booking.findOne({ _id: bookingId, providerId });
+  if (!booking) {
+    throw new AppError('Booking not found.', 404, ErrorCode.NOT_FOUND);
+  }
+  if (booking.bookingType !== BookingType.URGENT || !booking.urgentRequestId) {
+    throw new AppError('Only urgent bookings support provider re-dispatch.', 409, ErrorCode.CONFLICT);
+  }
+  if (!URGENT_REDEPLOY_STATUSES.includes(booking.status)) {
+    throw new AppError(
+      'This job can no longer be cancelled for re-dispatch.',
+      409,
+      ErrorCode.CONFLICT,
+    );
+  }
+
+  const request = await UrgentRequest.findById(booking.urgentRequestId);
+  if (!request) {
+    throw new AppError('Linked urgent request not found.', 404, ErrorCode.NOT_FOUND);
+  }
+
+  booking.status = BookingStatus.CANCELLED;
+  booking.cancellation = {
+    reason,
+    actorId: booking.providerId,
+    actorRole: UserRole.PROVIDER,
+    cancelledAt: new Date(),
+  };
+  await booking.save();
+
+  await addTimelineEvent({
+    bookingId: booking._id.toString(),
+    type: TimelineEventType.CANCELLED,
+    actorId: providerId,
+    actorRole: UserRole.PROVIDER,
+    metadata: { reason, redispatch: true },
+  });
+
+  await UrgentDispatchTarget.updateOne(
+    { urgentRequestId: request._id, providerId },
+    { status: UrgentDispatchTargetStatus.REJECTED, respondedAt: new Date() },
+  );
+
+  const service = await Service.findById(request.serviceId).select('urgentConfig');
+  const urgentConfig = resolveUrgentConfig(service ?? {});
+  const timeoutSeconds = urgentConfig.responseTimeoutMinutes * 60;
+  const freshExpiry = new Date(Date.now() + timeoutSeconds * 1000);
+
+  request.status = UrgentRequestStatus.SEARCHING;
+  request.providerId = undefined;
+  request.acceptedAt = undefined;
+  request.bookingId = undefined;
+  request.completedAt = undefined;
+  request.expiresAt = request.expiresAt > freshExpiry ? request.expiresAt : freshExpiry;
+  request.searchConfig.currentRadiusKm = 1;
+  request.searchConfig.notifiedCount = 0;
+  request.searchConfig.waveIndex = 0;
+  request.searchConfig.eligiblePoolSize = 0;
+  await request.save();
+
+  const { setProviderOnline } = await import('@/modules/presence/presence.service.js');
+  await setProviderOnline(providerId);
+
+  emitBookingStatusChanged(booking.customerId.toString(), {
+    bookingId: booking._id.toString(),
+    status: BookingStatus.CANCELLED,
+  });
+  emitToProvider(providerId, 'booking:status-changed', {
+    bookingId: booking._id.toString(),
+    status: BookingStatus.CANCELLED,
+  });
+
+  await createNotification({
+    userId: booking.customerId.toString(),
+    type: 'URGENT_PROVIDER_CANCELLED',
+    title: 'Finding another professional',
+    body: 'Your professional had to cancel. We are searching for someone else nearby.',
+    data: { urgentRequestId: request._id.toString(), bookingId: booking._id.toString() },
+  });
+
+  emitUrgentSearching(booking.customerId.toString(), serializeUrgentRequestSummary(request));
+  emitToAdmin('urgent:updated', { id: request._id.toString(), status: request.status });
+
+  await startUrgentSearchWaves(request._id.toString());
+  logger.info('urgent redispatch started after provider cancel', {
+    bookingId: booking._id.toString(),
+    urgentRequestId: request._id.toString(),
+    providerId,
+  });
+
+  return {
+    urgentRequest: serializeUrgentRequestSummary(request),
+    cancelledBookingId: booking._id.toString(),
+  };
 }

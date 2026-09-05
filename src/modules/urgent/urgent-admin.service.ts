@@ -2,12 +2,20 @@ import { UrgentDispatchTarget } from '@/models/UrgentDispatchTarget.js';
 import { UrgentRequest } from '@/models/UrgentRequest.js';
 import { Service } from '@/models/Service.js';
 import { ProviderProfile } from '@/models/ProviderProfile.js';
+import mongoose from 'mongoose';
 import { buildPaginationMeta } from '@/utils/catalog.js';
 import { serializeUrgentRequestDetail, serializeUrgentRequestSummary } from '@/utils/urgentSerializers.js';
 import { AppError } from '@/utils/AppError.js';
 import { ErrorCode, UrgentDispatchTargetStatus, UrgentRequestStatus } from '@ghaarfix/shared-types';
 import { emitUrgentRequestClosed, emitUrgentCancelled } from '@/modules/realtime/socket.service.js';
 import { AdminAuditLog } from '@/models/AdminAuditLog.js';
+import {
+  getDispatchConfig,
+  updateDispatchConfig,
+  type EffectiveDispatchConfig,
+} from '@/modules/urgent/urgent-config.service.js';
+
+export { getDispatchConfig };
 
 export async function adminListUrgentRequests(query: {
   page: number;
@@ -70,6 +78,22 @@ export async function adminGetUrgentRequest(requestId: string) {
     providerName: profile?.fullName,
     dispatchTargets: targets,
   });
+}
+
+export async function adminUpdateDispatchConfig(
+  adminId: string,
+  patch: Partial<EffectiveDispatchConfig>,
+) {
+  const config = await updateDispatchConfig(adminId, patch);
+  await AdminAuditLog.create({
+    adminId,
+    action: 'URGENT_DISPATCH_CONFIG_UPDATE',
+    entityType: 'URGENT_DISPATCH_CONFIG',
+    entityId: new mongoose.Types.ObjectId(adminId),
+    reason: 'Updated urgent dispatch runtime configuration',
+    metadata: { patch },
+  });
+  return config;
 }
 
 export async function adminCancelUrgentRequest(

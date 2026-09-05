@@ -36,6 +36,15 @@ export const cancelBooking = asyncHandler(async (req, res) => {
   sendSuccess(res, 'Booking cancelled successfully', booking);
 });
 
+export const reportNoShow = asyncHandler(async (req, res) => {
+  const result = await bookingService.redispatchAfterNoShow(
+    req.auth!.userId,
+    String(req.params.bookingId),
+    req.body.reason,
+  );
+  sendSuccess(res, 'Provider did not arrive. Searching for another professional.', result);
+});
+
 export const respondReschedule = asyncHandler(async (req, res) => {
   const booking = await bookingProviderService.respondToReschedule(
     req.auth!.userId,
@@ -83,6 +92,15 @@ export const rejectBooking = asyncHandler(async (req, res) => {
     req.body.category,
   );
   sendSuccess(res, 'Booking rejected successfully', booking);
+});
+
+export const cancelProviderBooking = asyncHandler(async (req, res) => {
+  const booking = await bookingProviderService.cancelProviderBooking(
+    req.auth!.userId,
+    String(req.params.bookingId),
+    req.body.reason,
+  );
+  sendSuccess(res, 'Booking cancelled successfully', booking);
 });
 
 export const enRoute = asyncHandler(async (req, res) => {

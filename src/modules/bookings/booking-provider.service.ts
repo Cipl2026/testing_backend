@@ -1,5 +1,6 @@
 import {
   BookingStatus,
+  BookingType,
   ErrorCode,
   PaymentStatus,
   PriceChangeStatus,
@@ -243,7 +244,29 @@ export async function updateBookingStatusAction(
     clearServiceCompletionOtp(booking);
   }
 
-  booking.status = transitionBookingStatus(booking.status, action, UserRole.PROVIDER);
+  const nextStatus = transitionBookingStatus(booking.status, action, UserRole.PROVIDER);
+
+  // Atomic conditional claim: the status transition itself must be atomic so
+  // concurrent duplicate actions (double start / double complete) cannot both
+  // succeed and re-trigger rewards, invoices, or finance outbox side effects.
+  const claimed = await Booking.findOneAndUpdate(
+    { _id: booking._id, status: booking.status },
+    { $set: { status: nextStatus } },
+    { new: true },
+  );
+  if (!claimed) {
+    const current = await Booking.findById(booking._id).select('status');
+    if (current && current.status === nextStatus) {
+      // Idempotent retry: the action already went through.
+      return serializeBookingSummary(booking, 'provider');
+    }
+    throw new AppError(
+      'Booking status was just updated by another action.',
+      409,
+      ErrorCode.CONFLICT,
+    );
+  }
+  booking.status = nextStatus;
 
   if (action === 'PROVIDER_EN_ROUTE') {
     if (!booking.tracking) booking.tracking = { state: TrackingState.NOT_TRACKING };
@@ -597,4 +620,58 @@ export async function respondToPriceChange(customerId: string, bookingId: string
   return serializeBookingDetail(booking, await listTimelineEvents(bookingId), {
     priceChangeRequest: request,
   }, 'provider');
+}
+
+export async function cancelProviderBooking(
+  providerId: string,
+  bookingId: string,
+  reason: string,
+) {
+  const booking = await getOwnedBooking(providerId, bookingId);
+
+  if (booking.bookingType === BookingType.URGENT && booking.urgentRequestId) {
+    const { restartUrgentDispatchAfterProviderCancel } = await import(
+      '@/modules/urgent/urgent.service.js'
+    );
+    const result = await restartUrgentDispatchAfterProviderCancel(bookingId, providerId, reason);
+    return {
+      redispatch: true,
+      urgentRequestId: result.urgentRequest.id,
+      cancelledBookingId: result.cancelledBookingId,
+    };
+  }
+
+  booking.status = transitionBookingStatus(booking.status, 'PROVIDER_CANCEL', UserRole.PROVIDER);
+  booking.cancellation = {
+    reason,
+    actorId: booking.providerId,
+    actorRole: UserRole.PROVIDER,
+    cancelledAt: new Date(),
+  };
+  await booking.save();
+
+  await releaseEntitlementForBooking(booking);
+
+  await addTimelineEvent({
+    bookingId,
+    type: TimelineEventType.CANCELLED,
+    actorId: providerId,
+    actorRole: UserRole.PROVIDER,
+    metadata: { reason },
+  });
+
+  emitBookingStatusChanged(booking.customerId.toString(), {
+    bookingId,
+    status: booking.status,
+  });
+
+  await notifyBookingEvent(
+    booking.customerId.toString(),
+    'BOOKING_CANCELLED',
+    'Booking cancelled',
+    reason.trim() || 'Your professional cancelled this booking.',
+    bookingId,
+  );
+
+  return serializeBookingSummary(booking, 'provider');
 }

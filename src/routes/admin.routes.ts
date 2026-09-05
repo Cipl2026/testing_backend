@@ -446,6 +446,32 @@ router.post(
 );
 
 router.get(
+  '/urgent/config',
+  authenticate,
+  authorize(UserRole.ADMIN),
+  urgentAdminController.getDispatchConfig,
+);
+router.put(
+  '/urgent/config',
+  authenticate,
+  authorize(UserRole.ADMIN),
+  validateBody(
+    z
+      .object({
+        invitationTtlSeconds: z.coerce.number().int().positive().optional(),
+        waveIntervalSeconds: z.coerce.number().int().positive().optional(),
+        batchSize: z.coerce.number().int().positive().max(10).optional(),
+        retryCooldownSeconds: z.coerce.number().int().positive().optional(),
+        noShowMinutes: z.coerce.number().int().positive().optional(),
+        maxRadiusKm: z.coerce.number().positive().max(100).optional(),
+        maxBroadcastProviders: z.coerce.number().int().positive().max(50).optional(),
+      })
+      .strict(),
+  ),
+  urgentAdminController.updateDispatchConfig,
+);
+
+router.get(
   '/invoices',
   authenticate,
   authorize(UserRole.ADMIN),

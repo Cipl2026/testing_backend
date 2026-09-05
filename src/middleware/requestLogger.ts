@@ -5,9 +5,8 @@ import { env } from '@/config/env.js';
 const noisyPaths = new Set(['/', '/json/version', '/favicon.ico']);
 
 export const requestLogger: RequestHandler =
-  env.nodeEnv === 'production'
-    ? morgan('combined')
-    : morgan('dev', {
+  env.logLevel === 'debug'
+    ? morgan('dev', {
         skip: (req, res) => {
           if (env.logLevel === 'debug') return false;
           if (noisyPaths.has(req.path)) return true;
@@ -16,4 +15,5 @@ export const requestLogger: RequestHandler =
           if (!req.path.startsWith('/api')) return true;
           return false;
         },
-      });
+      })
+    : (_req, _res, next) => next();

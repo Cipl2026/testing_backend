@@ -53,6 +53,14 @@ router.post(
   bookingController.cancelBooking,
 );
 router.post(
+  '/:bookingId/no-show',
+  authenticate,
+  authorize(UserRole.CUSTOMER),
+  validateParams(bookingIdParamSchema),
+  validateBody(cancelBookingBodySchema),
+  bookingController.reportNoShow,
+);
+router.post(
   '/:bookingId/reschedule-response',
   authenticate,
   authorize(UserRole.CUSTOMER),

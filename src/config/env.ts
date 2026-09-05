@@ -40,6 +40,8 @@ const envSchema = z.object({
   RAZORPAY_KEY_SECRET: z.string().optional(),
   RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
   URGENT_REQUEST_TIMEOUT_SECONDS: z.coerce.number().int().positive().default(120),
+  URGENT_WAVE_INTERVAL_SECONDS: z.coerce.number().int().positive().default(25),
+  URGENT_INVITATION_TTL_SECONDS: z.coerce.number().int().positive().default(25),
   URGENT_MAX_BROADCAST_PROVIDERS: z.coerce.number().int().positive().default(10),
   URGENT_REQUESTS_PER_HOUR: z.coerce.number().int().positive().default(3),
   URGENT_RETRY_COOLDOWN_SECONDS: z.coerce.number().int().positive().default(60),
@@ -47,6 +49,8 @@ const envSchema = z.object({
   PRESENCE_HEARTBEAT_SECONDS: z.coerce.number().int().positive().default(45),
   MAX_PROVIDER_LOCATION_AGE_MINUTES: z.coerce.number().int().positive().default(5),
   URGENT_MAX_ACTIVE_JOBS_PER_PROVIDER: z.coerce.number().int().positive().default(1),
+  URGENT_NO_SHOW_MINUTES: z.coerce.number().int().positive().default(20),
+  URGENT_BATCH_SIZE: z.coerce.number().int().positive().default(3),
   // Phase 7 — tracking
   MIN_HISTORY_DISTANCE_METERS: z.coerce.number().int().positive().default(100),
   MIN_HISTORY_INTERVAL_SECONDS: z.coerce.number().int().positive().default(60),
@@ -88,7 +92,7 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .optional()
     .transform((v) => v === 'true'),
-  LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+  LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('error'),
   QUEUE_CONCURRENCY: z.coerce.number().int().positive().default(5),
   GRACEFUL_SHUTDOWN_MS: z.coerce.number().int().positive().default(10000),
   CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(300),
@@ -158,6 +162,8 @@ function loadEnv() {
     },
     urgent: {
       requestTimeoutSeconds: data.URGENT_REQUEST_TIMEOUT_SECONDS,
+      waveIntervalSeconds: data.URGENT_WAVE_INTERVAL_SECONDS,
+      invitationTtlSeconds: data.URGENT_INVITATION_TTL_SECONDS,
       maxBroadcastProviders: data.URGENT_MAX_BROADCAST_PROVIDERS,
       requestsPerHour: data.URGENT_REQUESTS_PER_HOUR,
       retryCooldownSeconds: data.URGENT_RETRY_COOLDOWN_SECONDS,
@@ -165,6 +171,8 @@ function loadEnv() {
       heartbeatSeconds: data.PRESENCE_HEARTBEAT_SECONDS,
       maxProviderLocationAgeMinutes: data.MAX_PROVIDER_LOCATION_AGE_MINUTES,
       maxActiveJobsPerProvider: data.URGENT_MAX_ACTIVE_JOBS_PER_PROVIDER,
+      noShowMinutes: data.URGENT_NO_SHOW_MINUTES,
+      batchSize: data.URGENT_BATCH_SIZE,
     },
     tracking: {
       minHistoryDistanceMeters: data.MIN_HISTORY_DISTANCE_METERS,

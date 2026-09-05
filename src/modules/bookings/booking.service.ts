@@ -11,10 +11,14 @@ import {
   ProviderServiceApprovalStatus,
   ProviderStatus,
   TimelineEventType,
+  UrgentDispatchTargetStatus,
+  UrgentRequestStatus,
   UserRole,
 } from '@ghaarfix/shared-types';
 import { env } from '@/config/env.js';
 import { Booking } from '@/models/Booking.js';
+import { UrgentRequest } from '@/models/UrgentRequest.js';
+import { UrgentDispatchTarget } from '@/models/UrgentDispatchTarget.js';
 import { customerCompletionOtp } from '@/modules/bookings/service-completion-otp.service.js';
 import { BookingIdempotency } from '@/models/BookingIdempotency.js';
 import { BookingParticipant } from '@/models/BookingParticipant.js';
@@ -43,6 +47,7 @@ import {
 } from '@/modules/booking-participants/booking-participant.service.js';
 import { assertHomeCapability } from '@/modules/home-members/home-permission.service.js';
 import { AppError } from '@/utils/AppError.js';
+import { logger } from '@/utils/logger.js';
 import { generateBookingNumber } from '@/utils/bookingNumber.js';
 import { buildPaginationMeta } from '@/utils/catalog.js';
 import { serializeBookingDetail, serializeBookingSummary } from '@/utils/bookingSerializers.js';
@@ -582,4 +587,159 @@ export async function cancelCustomerBooking(customerId: string, bookingId: strin
 export async function expirePendingProviderRequests() {
   // Bookings stay pending until the customer cancels or the provider accepts/rejects with a reason.
   return 0;
+}
+
+/**
+ * No-show / unreachable resolution for URGENT bookings.
+ *
+ * A customer can escalate when their assigned provider is taking too long to
+ * arrive (or never shows up). We validate ownership, urgent type, current state
+ * and an elapsed-time threshold (configurable via URGENT_NO_SHOW_MINUTES), then:
+ *
+ * 1. Cancel the current booking (actor = CUSTOMER, reason stored).
+ * 2. Release the assigned provider.
+ * 3. Reset the linked UrgentRequest back to SEARCHING.
+ * 4. Restart dispatch waves (previously-failed provider is excluded).
+ * 5. Notify the customer that we are finding another professional.
+ *
+ * This mirrors provider-cancel redispatch but is customer-initiated and gated
+ * by the no-show time window so it cannot be abused to cancel for free.
+ */
+export async function redispatchAfterNoShow(
+  customerId: string,
+  bookingId: string,
+  reason: string,
+) {
+  const booking = await findBookingForCustomer(customerId, bookingId);
+
+  if (booking.bookingType !== BookingType.URGENT || !booking.urgentRequestId) {
+    throw new AppError('Only urgent bookings support no-show re-dispatch.', 409, ErrorCode.CONFLICT);
+  }
+
+  const noShowStatuses = [
+    BookingStatus.CONFIRMED,
+    BookingStatus.PROVIDER_EN_ROUTE,
+    BookingStatus.PROVIDER_ARRIVED,
+  ];
+  if (!noShowStatuses.includes(booking.status)) {
+    throw new AppError(
+      'This job cannot be re-dispatched in its current state.',
+      409,
+      ErrorCode.CONFLICT,
+    );
+  }
+
+  // Elapsed-time gate: only allow escalation after the provider has had a
+  // reasonable window to reach the customer. Prevents unlimited free cancels.
+  // The booking is created at the moment of assignment, so createdAt is the
+  // assignment time for urgent bookings.
+  const acceptedAt = booking.createdAt ?? booking.updatedAt;
+  const elapsedMs = Date.now() - new Date(acceptedAt).getTime();
+  const noShowWindowMs = env.urgent.noShowMinutes * 60 * 1000;
+  if (elapsedMs < noShowWindowMs) {
+    const remainingMin = Math.ceil((noShowWindowMs - elapsedMs) / 60000);
+    throw new AppError(
+      `You can escalate after ${remainingMin} more minute(s).`,
+      409,
+      ErrorCode.CONFLICT,
+    );
+  }
+
+  const request = await UrgentRequest.findById(booking.urgentRequestId);
+  if (!request) {
+    throw new AppError('Linked urgent request not found.', 404, ErrorCode.NOT_FOUND);
+  }
+  const redispatcheableStatuses = [
+    UrgentRequestStatus.ASSIGNED,
+    UrgentRequestStatus.CONVERTED_TO_BOOKING,
+  ];
+  if (!redispatcheableStatuses.includes(request.status)) {
+    throw new AppError('This urgent request is no longer re-dispatched.', 409, ErrorCode.CONFLICT);
+  }
+
+  // 1. Cancel the current booking atomically (in case the provider just acted).
+  const claimed = await Booking.findOneAndUpdate(
+    { _id: booking._id, status: booking.status },
+    {
+      $set: {
+        status: BookingStatus.CANCELLED,
+        cancellation: {
+          reason: `No-show: ${reason}`,
+          actorId: customerId,
+          actorRole: UserRole.CUSTOMER,
+          cancelledAt: new Date(),
+        },
+      },
+    },
+    { new: true },
+  );
+  if (!claimed) {
+    throw new AppError('Booking status changed; please retry.', 409, ErrorCode.CONFLICT);
+  }
+
+  await releaseEntitlementForBooking(claimed);
+
+  await addTimelineEvent({
+    bookingId: claimed._id.toString(),
+    type: TimelineEventType.CANCELLED,
+    actorId: customerId,
+    actorRole: UserRole.CUSTOMER,
+    metadata: { reason: `no-show: ${reason}`, redispatch: true },
+  });
+
+  // 2. Mark the provider's invitation as REJECTED so they are excluded on restart.
+  await UrgentDispatchTarget.updateOne(
+    { urgentRequestId: request._id, providerId: claimed.providerId },
+    { status: UrgentDispatchTargetStatus.REJECTED, respondedAt: new Date() },
+  );
+
+  // 3 + 4. Reset the request and restart dispatch.
+  request.status = UrgentRequestStatus.SEARCHING;
+  request.providerId = undefined;
+  request.acceptedAt = undefined;
+  request.bookingId = undefined;
+  request.completedAt = undefined;
+  request.expiresAt = new Date(Date.now() + env.urgent.requestTimeoutSeconds * 1000);
+  request.searchConfig.currentRadiusKm = 1;
+  request.searchConfig.notifiedCount = 0;
+  request.searchConfig.waveIndex = 0;
+  await request.save();
+
+  const { setProviderOnline } = await import('@/modules/presence/presence.service.js');
+  await setProviderOnline(claimed.providerId.toString());
+
+  emitBookingStatusChanged(customerId, {
+    bookingId: claimed._id.toString(),
+    status: BookingStatus.CANCELLED,
+    action: 'CUSTOMER_CANCEL',
+  });
+  emitToProvider(claimed.providerId.toString(), 'booking:status-changed', {
+    bookingId: claimed._id.toString(),
+    status: BookingStatus.CANCELLED,
+    action: 'CUSTOMER_CANCEL',
+  });
+
+  await notifyBookingEvent(
+    customerId,
+    'BOOKING_CANCELLED',
+    'Finding another professional',
+    'Your professional did not arrive on time. We are searching for someone else nearby.',
+    claimed._id.toString(),
+  );
+
+  const { startUrgentSearchWaves } = await import('@/modules/urgent/urgent-wave.service.js');
+  await startUrgentSearchWaves(request._id.toString());
+
+  logger.info('urgent no-show redispatch started', {
+    bookingId: claimed._id.toString(),
+    urgentRequestId: request._id.toString(),
+    customerId,
+    previousProviderId: claimed.providerId.toString(),
+  });
+
+  return {
+    redispatch: true,
+    urgentRequestId: request._id.toString(),
+    cancelledBookingId: claimed._id.toString(),
+  };
 }

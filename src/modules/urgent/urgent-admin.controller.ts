@@ -27,3 +27,13 @@ export const cancelUrgentRequest = asyncHandler(async (req: Request, res: Respon
   );
   sendSuccess(res, 'Urgent request cancelled.', data);
 });
+
+export const getDispatchConfig = asyncHandler(async (_req: Request, res: Response) => {
+  const config = await urgentAdminService.getDispatchConfig();
+  sendSuccess(res, 'Dispatch configuration retrieved.', config);
+});
+
+export const updateDispatchConfig = asyncHandler(async (req: Request, res: Response) => {
+  const config = await urgentAdminService.adminUpdateDispatchConfig(req.auth!.userId, req.body);
+  sendSuccess(res, 'Dispatch configuration updated.', config);
+});

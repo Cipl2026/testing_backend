@@ -7,9 +7,6 @@ import { registerJobs, runStartupJobs, stopJobs } from '@/jobs/index.js';
 import { closeQueues, initQueues } from '@/infra/queue.service.js';
 import { closeRedis, getRedisClient } from '@/infra/redis.js';
 import { runPhase11Jobs } from '@/modules/operations/phase11-jobs.js';
-import { seedAdminUser } from '@/modules/auth/auth.service.js';
-import { seedDefaultAssetTypes } from '@/modules/home-health/admin.service.js';
-import { seedDevEnvironment } from '@/scripts/seed-dev.js';
 import { runPhase11Migrations } from '@/migrations/001-phase11-indexes.js';
 import { runPhase12Migrations } from '@/migrations/002-phase12-care-plans.js';
 import { runPhase13Migrations } from '@/migrations/003-phase13-organizations.js';
@@ -39,45 +36,47 @@ let shuttingDown = false;
 attachSocketServer(httpServer);
 registerJobs();
 
+async function initializeApplicationServices(): Promise<void> {
+  try {
+    await runStartupJobs();
+    await runPhase11Migrations();
+    await runPhase12Migrations();
+    await runPhase13Migrations();
+    await runPhase14Migrations();
+    await runPhase15Migrations();
+    await runPhase16Migrations();
+    await runPhase17Migrations();
+    await runPhase18Migrations();
+    await runPhase19Migrations();
+    await runPhase20Migrations();
+    await runPhase21Migrations();
+    await runPhase22Migrations();
+    await runPhase23Migrations();
+    await runPhase24Migrations();
+    installDbProfiler();
+
+    await getRedisClient();
+    await initQueues({
+      cleanup: async () => {
+        await runPhase11Jobs();
+      },
+      [QueueName.IOT_EVENTS]: async (data) => {
+        const eventId = data.eventId as string;
+        if (eventId) await processIoTEvent(eventId);
+      },
+    });
+  } catch (error) {
+    logger.error('Failed to initialize application services', { error });
+  }
+}
+
 async function start(): Promise<void> {
   validateProductionSecrets();
   await connectDatabase();
-  await runStartupJobs();
-  await runPhase11Migrations();
-  await runPhase12Migrations();
-  await runPhase13Migrations();
-  await runPhase14Migrations();
-  await runPhase15Migrations();
-  await runPhase16Migrations();
-  await runPhase17Migrations();
-  await runPhase18Migrations();
-  await runPhase19Migrations();
-  await runPhase20Migrations();
-  await runPhase21Migrations();
-  await runPhase22Migrations();
-  await runPhase23Migrations();
-  await runPhase24Migrations();
-  installDbProfiler();
-
-  await getRedisClient();
-  await initQueues({
-    cleanup: async () => {
-      await runPhase11Jobs();
-    },
-    [QueueName.IOT_EVENTS]: async (data) => {
-      const eventId = data.eventId as string;
-      if (eventId) await processIoTEvent(eventId);
-    },
-  });
-
-  if (!env.isProd && !env.isTest) {
-    await seedAdminUser();
-    await seedDefaultAssetTypes();
-    await seedDevEnvironment();
-  }
 
   httpServer.listen(env.port, () => {
-    logger.startup(`GhaarFix API → http://localhost:${env.port} (${env.nodeEnv})`);
+    logger.startup(`GhaarFix server is successfully running at http://localhost:${env.port} (${env.nodeEnv})`);
+    void initializeApplicationServices();
   });
 }
 

@@ -113,10 +113,6 @@ export const logger = {
     write('error', message, meta);
   },
   startup(message: string): void {
-    if (isPretty()) {
-      console.log(`\n  🚀 ${message}\n`);
-      return;
-    }
-    write('info', message);
+    console.log(message);
   },
 };

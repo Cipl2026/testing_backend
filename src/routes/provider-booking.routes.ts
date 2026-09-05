@@ -9,6 +9,7 @@ import { objectIdParamSchema } from '@/validators/catalog.js';
 import {
   bookingIdParamSchema,
   bookingListQuerySchema,
+  cancelBookingBodySchema,
   completeServiceBodySchema,
   priceChangeRequestBodySchema,
   rejectBookingBodySchema,
@@ -66,6 +67,14 @@ router.post(
   validateParams(bookingIdParamSchema),
   validateBody(rejectBookingBodySchema),
   bookingController.rejectBooking,
+);
+router.post(
+  '/bookings/:bookingId/cancel',
+  authenticate,
+  authorize(UserRole.PROVIDER),
+  validateParams(bookingIdParamSchema),
+  validateBody(cancelBookingBodySchema),
+  bookingController.cancelProviderBooking,
 );
 router.post(
   '/bookings/:bookingId/en-route',

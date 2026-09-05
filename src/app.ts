@@ -37,6 +37,11 @@ export function createApp(): express.Application {
   if (!env.isTest) {
     app.use(generalLimiter);
   }
+
+  app.get('/', (_req, res) => {
+    res.status(200).type('text/plain').send('GhaarFix server is successfully running.');
+  });
+
   app.use(async (req, res, next) => {
     try {
       await maintenanceModeMiddleware(req, res, next);

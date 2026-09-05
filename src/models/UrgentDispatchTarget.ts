@@ -7,6 +7,10 @@ export interface IUrgentDispatchTarget extends Document {
   status: UrgentDispatchTargetStatus;
   distanceMeters: number;
   rankScore: number;
+  /** Road/travel distance from Google Directions when available (UI only). Matching still uses aerial distanceMeters. */
+  roadDistanceMeters?: number;
+  /** Road/travel ETA minutes from Google Directions when available (UI only). */
+  etaMinutes?: number;
   notifiedAt?: Date;
   seenAt?: Date;
   respondedAt?: Date;
@@ -26,6 +30,8 @@ const urgentDispatchTargetSchema = new Schema<IUrgentDispatchTarget>(
     },
     distanceMeters: { type: Number, required: true },
     rankScore: { type: Number, required: true },
+    roadDistanceMeters: Number,
+    etaMinutes: Number,
     notifiedAt: Date,
     seenAt: Date,
     respondedAt: Date,
