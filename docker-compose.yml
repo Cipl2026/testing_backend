@@ -1,0 +1,12 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: .
+    container_name: test_backend
+    ports:
+      - "8008:8008"
+    env_file:
+      - .env
+    restart: always

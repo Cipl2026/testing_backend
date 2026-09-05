@@ -1,0 +1,35 @@
+name: GhaarFix Backend CI/CD
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+concurrency:
+  group: ghaarfix-backend-deployment
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy Backend
+    runs-on:
+      - self-hosted
+      - ghaarfix-backend
+
+    steps:
+      - name: Deploy Application
+        run: |
+          cd ~/testing_backend
+
+          git fetch origin main
+          git reset --hard origin/main
+
+          docker compose down
+          docker compose up -d --build
+
+      - name: Verify Deployment
+        run: |
+          sleep 10
+          docker ps --filter "name=test_backend"
