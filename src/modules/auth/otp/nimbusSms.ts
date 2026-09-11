@@ -43,5 +43,32 @@ export async function sendNimbusSms(mobile: string, otp: string): Promise<unknow
   });
 
   logger.info('Nimbus SMS API response', { mobile: toNimbusMobile(mobile), data: response.data });
+
+  assertGatewayAccepted(response.data);
   return response.data;
+}
+
+/**
+ * Nimbus reports failures inside the response body with an HTTP 200 status,
+ * e.g. {"STATUS":"ERROR","RESPONSE":{"CODE":"200","INFO":"AUTHENTICATION FAILURE"}}.
+ * Without this check the app would say "OTP sent successfully" even though the
+ * message was never delivered, which is a common cause of "OTP expired or wrong"
+ * the moment the user tries to verify. Fail fast when the gateway says so.
+ */
+function assertGatewayAccepted(data: unknown): void {
+  if (typeof data !== 'object' || data === null) return;
+
+  const status = String((data as { STATUS?: unknown }).STATUS ?? '').toLowerCase();
+  const rejected = status === 'error' || status === 'failure' || status.includes('fail');
+  if (!rejected) return;
+
+  const response = (data as { RESPONSE?: unknown }).RESPONSE;
+  const info =
+    typeof response === 'object' && response !== null
+      ? (response as { INFO?: unknown }).INFO
+      : undefined;
+  const detail = typeof info === 'string' && info ? `: ${info}` : '';
+
+  logger.error('Nimbus SMS gateway rejected the message', { status, info });
+  throw new Error(`SMS gateway rejected the message${detail}`);
 }

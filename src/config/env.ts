@@ -112,11 +112,27 @@ function loadEnv() {
   }
 
   const data = parsed.data;
-  const corsOrigins = [...data.CLIENT_URL.split(','), ...data.ADMIN_URL.split(',')]
+  const isProd = data.NODE_ENV === 'production';
+
+  const configuredCorsOrigins = [...data.CLIENT_URL.split(','), ...data.ADMIN_URL.split(',')]
     .map((origin) => origin.trim())
     .filter(Boolean);
 
-  const isProd = data.NODE_ENV === 'production';
+  // Local dev can land on any free port: Vite picks 5173/5174/5175… as new
+  // ports get occupied and Expo serves the mobile apps on 8081/8082.
+  // Auto-allow the standard localhost origins outside production so CORS never
+  // breaks just because the dev port shifted.
+  const devLocalOrigins = isProd
+    ? []
+    : [
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'http://localhost:5175',
+        'http://localhost:8081',
+        'http://localhost:8082',
+      ];
+
+  const corsOrigins = [...new Set([...configuredCorsOrigins, ...devLocalOrigins])];
 
   return {
     nodeEnv: data.NODE_ENV,
