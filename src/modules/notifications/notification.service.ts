@@ -1,6 +1,14 @@
 import { Notification } from '@/models/Notification.js';
-import { getPushNotificationService } from '@/modules/push/push-notification.service.js';
+import { User } from '@/models/User.js';
+import { UserRole } from '@ghaarfix/shared-types';
+import { enqueuePushNotification } from '@/modules/notifications/notification-queue.processor.js';
 import { emitNotificationNew } from '@/modules/realtime/socket.service.js';
+
+async function resolveNotificationRole(userId: string, role?: UserRole): Promise<UserRole> {
+  if (role) return role;
+  const user = await User.findById(userId).select('role').lean();
+  return (user?.role as UserRole | undefined) ?? UserRole.CUSTOMER;
+}
 
 export async function createNotification(input: {
   userId: string;
@@ -8,7 +16,17 @@ export async function createNotification(input: {
   title: string;
   body: string;
   data?: Record<string, unknown>;
+  userRole?: UserRole;
 }) {
+  if (input.type === 'REVIEW_REMINDER' && input.data?.bookingId) {
+    const existing = await Notification.findOne({
+      userId: input.userId,
+      type: 'REVIEW_REMINDER',
+      'data.bookingId': String(input.data.bookingId),
+    });
+    if (existing) return existing;
+  }
+
   const doc = await Notification.create({
     userId: input.userId,
     type: input.type,
@@ -18,7 +36,9 @@ export async function createNotification(input: {
     isRead: false,
   });
 
-  emitNotificationNew(input.userId, {
+  const role = await resolveNotificationRole(input.userId, input.userRole);
+
+  emitNotificationNew(input.userId, role, {
     id: doc._id.toString(),
     type: input.type,
     title: input.title,
@@ -36,14 +56,19 @@ export async function notifyBookingEvent(
   title: string,
   body: string,
   bookingId: string,
+  userRole?: UserRole,
 ) {
-  await createNotification({ userId, type, title, body, data: { bookingId } });
-  void getPushNotificationService().sendToUser(userId, {
-    title,
-    body,
-    data: { bookingId, type },
-    collapseId: `booking-${bookingId}`,
-    tier: 'default',
+  await createNotification({ userId, type, title, body, data: { bookingId }, userRole });
+  void enqueuePushNotification({
+    audience: 'user',
+    targetId: userId,
+    message: {
+      title,
+      body,
+      data: { bookingId, type },
+      collapseId: `booking-${bookingId}`,
+      tier: 'default',
+    },
   });
 }
 

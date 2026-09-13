@@ -59,6 +59,7 @@ export function serializeBookingSummary(booking: IBooking, audience: 'customer' 
     status: booking.status,
     providerRequestStatus: booking.providerRequestStatus,
     providerResponseExpiresAt: booking.providerResponseExpiresAt?.toISOString(),
+    providerRequestExpiredAt: booking.providerRequestExpiredAt?.toISOString(),
     service: booking.serviceSnapshot,
     provider: booking.providerSnapshot,
     address: booking.addressSnapshot,
@@ -81,6 +82,19 @@ export function serializeBookingSummary(booking: IBooking, audience: 'customer' 
     homeId: booking.homeId?.toString(),
     assetId: booking.assetId?.toString(),
     assetSnapshot: booking.assetSnapshot,
+    homeHelp: booking.homeHelp
+      ? {
+          durationLabel: booking.homeHelp.durationLabel,
+          durationMinutes: booking.homeHelp.durationMinutes,
+          generalNotes: booking.homeHelp.generalNotes,
+          tasks: booking.homeHelp.tasks.map((task) => ({
+            serviceId: task.serviceId.toString(),
+            name: task.name,
+            priority: task.priority,
+            notes: task.notes,
+          })),
+        }
+      : undefined,
     createdAt: booking.createdAt.toISOString(),
   };
 }

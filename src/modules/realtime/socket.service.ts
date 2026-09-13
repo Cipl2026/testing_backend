@@ -1,4 +1,5 @@
 import type { Server as SocketIOServer } from 'socket.io';
+import { UserRole } from '@ghaarfix/shared-types';
 
 let io: SocketIOServer | null = null;
 
@@ -74,8 +75,12 @@ export function emitInvoiceReady(customerId: string, payload: unknown): void {
   emitToCustomer(customerId, 'invoice:ready', payload);
 }
 
-export function emitNotificationNew(customerId: string, payload: unknown): void {
-  emitToCustomer(customerId, 'notification:new', payload);
+export function emitNotificationNew(userId: string, role: UserRole, payload: unknown): void {
+  if (role === UserRole.PROVIDER) {
+    emitToProvider(userId, 'notification:new', payload);
+    return;
+  }
+  emitToCustomer(userId, 'notification:new', payload);
 }
 
 export function emitSupportMessage(customerId: string, payload: unknown): void {

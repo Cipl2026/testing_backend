@@ -3,7 +3,7 @@ import {
   PaymentMethod,
   UrgentRequestStatus,
 } from '@ghaarfix/shared-types';
-import type { AddressSnapshot } from '@/models/Booking.js';
+import type { AddressSnapshot, HomeHelpBookingSnapshot } from '@/models/Booking.js';
 
 export interface UrgentPricingSnapshot {
   baseAmount: number;
@@ -50,6 +50,7 @@ export interface IUrgentRequest extends Document {
     actorId?: Types.ObjectId;
     actorRole?: string;
   };
+  homeHelp?: HomeHelpBookingSnapshot;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -112,6 +113,21 @@ const urgentRequestSchema = new Schema<IUrgentRequest>(
       reason: String,
       actorId: Schema.Types.ObjectId,
       actorRole: String,
+    },
+    homeHelp: {
+      durationPackageId: { type: Schema.Types.ObjectId, ref: 'HomeHelpDurationPackage' },
+      durationLabel: String,
+      durationMinutes: Number,
+      quotedAmount: Number,
+      generalNotes: String,
+      tasks: [
+        {
+          serviceId: { type: Schema.Types.ObjectId, ref: 'Service' },
+          name: String,
+          priority: { type: String, enum: ['HIGH', 'MEDIUM', 'LOW'] },
+          notes: String,
+        },
+      ],
     },
   },
   { timestamps: true },

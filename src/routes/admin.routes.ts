@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { UserRole } from '@ghaarfix/shared-types';
+import * as appVersionAdminController from '@/modules/app-updates/app-version-admin.controller.js';
 import * as adminController from '@/modules/auth/admin.controller.js';
 import * as userAdminController from '@/modules/users/user-admin.controller.js';
 import * as platformAdminController from '@/modules/platform/admin-platform.controller.js';
@@ -30,7 +31,14 @@ import {
   cancelUrgentBodySchema,
   urgentRequestIdParamSchema,
 } from '@/validators/urgent.js';
+import {
+  homeHelpDurationPackageBodySchema,
+  homeHelpDurationPackageUpdateSchema,
+  homeHelpCompatibilityConfigBodySchema,
+  homeHelpPackageIdParamSchema,
+} from '@/validators/home-help-admin.js';
 import * as urgentAdminController from '@/modules/urgent/urgent-admin.controller.js';
+import * as homeHelpAdminController from '@/modules/home-help/home-help-admin.controller.js';
 import * as postServiceController from '@/modules/post-service/post-service.controller.js';
 import * as homeHealthController from '@/modules/home-health/home-health.controller.js';
 import {
@@ -1976,6 +1984,68 @@ router.get(
   authenticate,
   authorize(UserRole.ADMIN),
   globalizationAdminController.listDataResidency,
+);
+
+router.get(
+  '/app-versions',
+  authenticate,
+  authorize(UserRole.ADMIN),
+  appVersionAdminController.listAppVersions,
+);
+router.put(
+  '/app-versions',
+  authenticate,
+  authorize(UserRole.ADMIN),
+  appVersionAdminController.upsertAppVersion,
+);
+router.delete(
+  '/app-versions/:id',
+  authenticate,
+  authorize(UserRole.ADMIN),
+  appVersionAdminController.deleteAppVersion,
+);
+
+router.get(
+  '/home-help/duration-packages',
+  authenticate,
+  authorize(UserRole.ADMIN),
+  homeHelpAdminController.listPackages,
+);
+router.post(
+  '/home-help/duration-packages',
+  authenticate,
+  authorize(UserRole.ADMIN),
+  validateBody(homeHelpDurationPackageBodySchema),
+  homeHelpAdminController.createPackage,
+);
+router.patch(
+  '/home-help/duration-packages/:packageId',
+  authenticate,
+  authorize(UserRole.ADMIN),
+  validateParams(homeHelpPackageIdParamSchema),
+  validateBody(homeHelpDurationPackageUpdateSchema),
+  homeHelpAdminController.updatePackage,
+);
+router.delete(
+  '/home-help/duration-packages/:packageId',
+  authenticate,
+  authorize(UserRole.ADMIN),
+  validateParams(homeHelpPackageIdParamSchema),
+  homeHelpAdminController.removePackage,
+);
+
+router.get(
+  '/home-help/compatibility-config',
+  authenticate,
+  authorize(UserRole.ADMIN),
+  homeHelpAdminController.getCompatibilityConfig,
+);
+router.patch(
+  '/home-help/compatibility-config',
+  authenticate,
+  authorize(UserRole.ADMIN),
+  validateBody(homeHelpCompatibilityConfigBodySchema),
+  homeHelpAdminController.updateCompatibilityConfig,
 );
 
 export default router;

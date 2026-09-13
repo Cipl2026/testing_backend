@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { PricingType, ProviderServiceApprovalStatus } from '@ghaarfix/shared-types';
+import {
+  HomeHelpCompatibilityGroup,
+  PricingType,
+  ProviderServiceApprovalStatus,
+  ServiceProviderType,
+} from '@ghaarfix/shared-types';
 import { objectIdSchema, paginationQuerySchema } from '@ghaarfix/validation';
 
 const catalogImageSchema = z
@@ -98,6 +103,10 @@ export const serviceBodySchema = z.object({
   isActive: z.boolean().optional(),
   isFeatured: z.boolean().optional(),
   displayOrder: z.number().int().min(0).optional(),
+  providerType: z.nativeEnum(ServiceProviderType).optional(),
+  hourlyEligible: z.boolean().optional(),
+  instantEligible: z.boolean().optional(),
+  compatibilityGroup: z.nativeEnum(HomeHelpCompatibilityGroup).optional(),
   metadata: z.record(z.unknown()).optional(),
 });
 

@@ -21,8 +21,14 @@ import { runPhase21Migrations } from '@/migrations/011-phase21-reliability.js';
 import { runPhase22Migrations } from '@/migrations/012-phase22-security.js';
 import { runPhase23Migrations } from '@/migrations/013-phase23-performance.js';
 import { runPhase24Migrations } from '@/migrations/014-phase24-globalization.js';
+import { runPhase25Migrations } from '@/migrations/015-phase25-home-help.js';
 import { installDbProfiler } from '@/middleware/dbProfiler.js';
 import { processIoTEvent } from '@/modules/iot/event-processor.service.js';
+import { processNotificationJob } from '@/modules/notifications/notification-queue.processor.js';
+import {
+  processUrgentBatchTimeoutJob,
+  recoverActiveUrgentDispatches,
+} from '@/modules/urgent/urgent-wave.service.js';
 import { markShuttingDown } from '@/modules/reliability/health-check.service.js';
 import { QueueName } from '@ghaarfix/shared-types';
 import { validateProductionSecrets } from '@/modules/security/secret-provider.service.js';
@@ -53,6 +59,7 @@ async function initializeApplicationServices(): Promise<void> {
     await runPhase22Migrations();
     await runPhase23Migrations();
     await runPhase24Migrations();
+    await runPhase25Migrations();
     installDbProfiler();
 
     await getRedisClient();
@@ -64,7 +71,14 @@ async function initializeApplicationServices(): Promise<void> {
         const eventId = data.eventId as string;
         if (eventId) await processIoTEvent(eventId);
       },
+      [QueueName.NOTIFICATIONS]: async (data) => {
+        await processNotificationJob(data);
+      },
+      [QueueName.URGENT_MATCHING]: async (data) => {
+        await processUrgentBatchTimeoutJob(data);
+      },
     });
+    await recoverActiveUrgentDispatches();
   } catch (error) {
     logger.error('Failed to initialize application services', { error });
   }

@@ -53,6 +53,13 @@ export const paymentConfirmationBodySchema = z.object({
   role: z.enum(['CUSTOMER', 'PROVIDER']),
 });
 
+export const startServiceBodySchema = z.object({
+  startOtp: z
+    .string()
+    .trim()
+    .regex(/^\d{4}$/, 'Enter the 4-digit start code from the customer'),
+});
+
 export const completeServiceBodySchema = z.object({
   completionOtp: z
     .string()
@@ -63,6 +70,10 @@ export const completeServiceBodySchema = z.object({
 export const bookingListQuerySchema = paginationQuerySchema.extend({
   status: z.string().optional(),
   tab: z.enum(['upcoming', 'past', 'completed', 'cancelled', 'requests', 'in_progress']).optional(),
+});
+
+export const findAnotherProviderBodySchema = z.object({
+  providerId: objectIdSchema.optional(),
 });
 
 export const bookingIdParamSchema = z.object({ bookingId: objectIdSchema });

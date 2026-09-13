@@ -30,7 +30,6 @@ import {
   emitUrgentCancelled,
   emitUrgentExpired,
   emitUrgentRequestClosed,
-  emitUrgentSearching,
   emitToAdmin,
   emitToProvider,
 } from '@/modules/realtime/socket.service.js';
@@ -55,7 +54,7 @@ const DEFAULT_URGENT_CONFIG: ServiceUrgentConfig = {
   maxBroadcastProviders: 10,
 };
 
-function resolveUrgentConfig(service: {
+export function resolveUrgentConfig(service: {
   urgentConfig?: Partial<ServiceUrgentConfig>;
 }): ServiceUrgentConfig {
   const config = service.urgentConfig;
@@ -75,13 +74,14 @@ function resolveUrgentConfig(service: {
   return { ...DEFAULT_URGENT_CONFIG, enabled: false };
 }
 
-function calculateUrgentPricing(
+export function calculateUrgentPricing(
   service: {
     pricing: { startingPrice?: number; currency: string };
   },
   urgentConfig: ServiceUrgentConfig,
+  baseAmountOverride?: number,
 ) {
-  const baseAmount = service.pricing.startingPrice ?? 0;
+  const baseAmount = baseAmountOverride ?? service.pricing.startingPrice ?? 0;
   const urgentFee = calculateUrgentSurcharge(urgentConfig.baseFee + urgentConfig.extraFee);
   const priced = calculateJobPricing({ serviceAmount: baseAmount, urgentSurcharge: urgentFee });
   return {
@@ -329,15 +329,16 @@ export async function convertUrgentToBooking(
   }
 
   const now = new Date();
-  const durationMinutes = service.estimatedDuration.maxMinutes;
+  const durationMinutes = request.homeHelp?.durationMinutes ?? service.estimatedDuration.maxMinutes;
   const scheduledEnd = new Date(now.getTime() + durationMinutes * 60 * 1000);
 
   const paymentStatus = initialPaymentStatus(request.paymentMethod);
+  const estimatedTotal = request.homeHelp?.quotedAmount ?? request.pricing.estimatedTotal;
 
   const booking = await Booking.create({
     bookingNumber: await generateBookingNumber(),
     bookingType: BookingType.URGENT,
-    source: BookingSource.URGENT_FIX,
+    source: request.homeHelp ? BookingSource.HOME_HELP : BookingSource.URGENT_FIX,
     customerId: request.customerId,
     providerId,
     serviceId: request.serviceId,
@@ -362,8 +363,8 @@ export async function convertUrgentToBooking(
     durationMinutes,
     customerNotes: request.customerNotes,
     price: {
-      estimatedAmount: request.pricing.estimatedTotal,
-      finalAmount: request.pricing.estimatedTotal,
+      estimatedAmount: estimatedTotal,
+      finalAmount: estimatedTotal,
       currency: request.pricing.currency,
       baseAmount: request.pricing.baseAmount,
       urgentSurcharge: request.pricing.urgentFee,
@@ -378,6 +379,21 @@ export async function convertUrgentToBooking(
       status: paymentStatus,
     },
     reschedule: { providerRescheduleCount: 0 },
+    homeHelp: request.homeHelp
+      ? {
+          durationPackageId: request.homeHelp.durationPackageId,
+          durationLabel: request.homeHelp.durationLabel,
+          durationMinutes: request.homeHelp.durationMinutes,
+          quotedAmount: request.homeHelp.quotedAmount,
+          generalNotes: request.homeHelp.generalNotes,
+          tasks: request.homeHelp.tasks.map((task) => ({
+            serviceId: task.serviceId,
+            name: task.name,
+            priority: task.priority,
+            notes: task.notes,
+          })),
+        }
+      : undefined,
   });
 
   const payment = await Payment.create({
@@ -471,27 +487,19 @@ export async function restartUrgentDispatchAfterProviderCancel(
     metadata: { reason, redispatch: true },
   });
 
-  await UrgentDispatchTarget.updateOne(
-    { urgentRequestId: request._id, providerId },
-    { status: UrgentDispatchTargetStatus.REJECTED, respondedAt: new Date() },
-  );
-
   const service = await Service.findById(request.serviceId).select('urgentConfig');
   const urgentConfig = resolveUrgentConfig(service ?? {});
   const timeoutSeconds = urgentConfig.responseTimeoutMinutes * 60;
   const freshExpiry = new Date(Date.now() + timeoutSeconds * 1000);
-
-  request.status = UrgentRequestStatus.SEARCHING;
-  request.providerId = undefined;
-  request.acceptedAt = undefined;
-  request.bookingId = undefined;
-  request.completedAt = undefined;
-  request.expiresAt = request.expiresAt > freshExpiry ? request.expiresAt : freshExpiry;
-  request.searchConfig.currentRadiusKm = 1;
-  request.searchConfig.notifiedCount = 0;
-  request.searchConfig.waveIndex = 0;
-  request.searchConfig.eligiblePoolSize = 0;
-  await request.save();
+  const { resetUrgentRequestForRedispatch } = await import(
+    '@/modules/urgent/urgent-redispatch.service.js'
+  );
+  await resetUrgentRequestForRedispatch({
+    request,
+    rejectedProviderId: providerId,
+    customerId: booking.customerId.toString(),
+    expiresAt: request.expiresAt > freshExpiry ? request.expiresAt : freshExpiry,
+  });
 
   const { setProviderOnline } = await import('@/modules/presence/presence.service.js');
   await setProviderOnline(providerId);
@@ -513,10 +521,8 @@ export async function restartUrgentDispatchAfterProviderCancel(
     data: { urgentRequestId: request._id.toString(), bookingId: booking._id.toString() },
   });
 
-  emitUrgentSearching(booking.customerId.toString(), serializeUrgentRequestSummary(request));
   emitToAdmin('urgent:updated', { id: request._id.toString(), status: request.status });
 
-  await startUrgentSearchWaves(request._id.toString());
   logger.info('urgent redispatch started after provider cancel', {
     bookingId: booking._id.toString(),
     urgentRequestId: request._id.toString(),

@@ -5,9 +5,12 @@ import {
   processWarrantyAlerts,
   refreshMaintenanceScheduleStatuses,
 } from '@/modules/home-health/maintenance.service.js';
-import { getBookingsNeedingReviewReminder } from '@/modules/reviews/review.service.js';
-import { notifyBookingEvent } from '@/modules/notifications/notification.service.js';
+import {
+  backfillReviewReminderSentFlags,
+  processReviewReminders,
+} from '@/modules/reviews/review.service.js';
 import { expireUrgentRequests } from '@/modules/urgent/urgent.service.js';
+import { processProviderConfirmationReminders } from '@/modules/bookings/provider-confirmation.service.js';
 import { expireStalePresence } from '@/modules/presence/presence.service.js';
 import { cleanupOldLocationHistory } from '@/modules/tracking/location-tracking.service.js';
 import { purgeExpiredChatMessages } from '@/modules/support/chat-retention.service.js';
@@ -33,8 +36,8 @@ import { runPhase21Jobs } from '@/modules/reliability/phase21-jobs.js';
 import { runPhase22Jobs } from '@/modules/security/phase22-jobs.js';
 import { runPhase23Jobs } from '@/modules/performance/phase23-jobs.js';
 import { runPhase24Jobs } from '@/modules/globalization/phase24-jobs.js';
-import { Booking } from '@/models/Booking.js';
 import { logger } from '@/utils/logger.js';
+import { rebuildProviderGeoIndex } from '@/infra/provider-geo.service.js';
 
 let interval: ReturnType<typeof setInterval> | null = null;
 let phase10Initialized = false;
@@ -45,6 +48,26 @@ export async function runStartupJobs(): Promise<void> {
     if (count > 0) logger.info('Backfilled home owner memberships', { count });
   } catch (error) {
     logger.error('Failed to backfill home owners', { error });
+  }
+
+  try {
+    const reviewReminderBackfill = await backfillReviewReminderSentFlags();
+    if (reviewReminderBackfill > 0) {
+      logger.info('Backfilled review reminder flags on completed bookings', {
+        count: reviewReminderBackfill,
+      });
+    }
+  } catch (error) {
+    logger.error('Failed to backfill review reminder flags', { error });
+  }
+
+  try {
+    const indexed = await rebuildProviderGeoIndex();
+    if (indexed > 0) {
+      logger.info('Startup provider GEO index ready', { indexed });
+    }
+  } catch (error) {
+    logger.error('Failed to rebuild provider GEO index', { error });
   }
 }
 
@@ -258,20 +281,17 @@ export function registerJobs(): void {
       })
       .catch((error) => logger.error('Failed to run Phase 24 jobs', { error }));
 
-    getBookingsNeedingReviewReminder()
-      .then(async (bookingIds) => {
-        for (const bookingId of bookingIds) {
-          const booking = await Booking.findById(bookingId);
-          if (!booking) continue;
-          await notifyBookingEvent(
-            booking.customerId.toString(),
-            'REVIEW_REMINDER',
-            'How was your service?',
-            'Share your experience with your professional.',
-            bookingId,
-          );
+    processProviderConfirmationReminders()
+      .then((result) => {
+        if (result.reminders24h + result.reminders2h + result.replacements > 0) {
+          logger.info('Ran provider confirmation jobs', result);
         }
-        if (bookingIds.length > 0) logger.info('Sent review reminders', { count: bookingIds.length });
+      })
+      .catch((error) => logger.error('Failed to run provider confirmation jobs', { error }));
+
+    processReviewReminders()
+      .then(({ sent }) => {
+        if (sent > 0) logger.info('Sent review reminders', { count: sent });
       })
       .catch((error) => logger.error('Failed to send review reminders', { error }));
   }, 60_000);

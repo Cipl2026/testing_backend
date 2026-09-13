@@ -14,6 +14,7 @@ import {
   updateDispatchConfig,
   type EffectiveDispatchConfig,
 } from '@/modules/urgent/urgent-config.service.js';
+import { stopUrgentSearchWaves } from '@/modules/urgent/urgent-wave.service.js';
 
 export { getDispatchConfig };
 
@@ -121,6 +122,8 @@ export async function adminCancelUrgentRequest(
   if (!cancelled) {
     throw new AppError('Urgent request could not be cancelled.', 409, ErrorCode.CONFLICT);
   }
+
+  stopUrgentSearchWaves(requestId);
 
   await UrgentDispatchTarget.updateMany(
     { urgentRequestId: cancelled._id },

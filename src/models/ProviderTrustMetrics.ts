@@ -8,6 +8,8 @@ export interface IProviderTrustMetrics extends Document {
   averageRating: number;
   reviewCount: number;
   onTimePercentage: number;
+  trustScore?: number;
+  cancellationRate?: number;
   badges: ProviderBadge[];
   lastCalculatedAt: Date;
   createdAt: Date;
@@ -22,6 +24,8 @@ const providerTrustMetricsSchema = new Schema<IProviderTrustMetrics>(
     averageRating: { type: Number, default: 0 },
     reviewCount: { type: Number, default: 0 },
     onTimePercentage: { type: Number, default: 100 },
+    trustScore: { type: Number, default: 0 },
+    cancellationRate: { type: Number, default: 0 },
     badges: { type: [String], enum: Object.values(ProviderBadge), default: [] },
     lastCalculatedAt: { type: Date, default: Date.now },
   },

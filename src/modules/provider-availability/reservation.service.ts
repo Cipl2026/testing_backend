@@ -1,8 +1,10 @@
 import { DateTime } from 'luxon';
-import { ErrorCode, SlotReservationStatus } from '@ghaarfix/shared-types';
+import { ErrorCode, SlotReservationStatus, type HomeHelpTaskPriority } from '@ghaarfix/shared-types';
 import { env } from '@/config/env.js';
+import { getRedisClient } from '@/infra/redis.js';
 import { Service } from '@/models/Service.js';
 import { SlotReservation } from '@/models/SlotReservation.js';
+import { Types } from 'mongoose';
 import { getCustomerAddressForMatching } from '@/modules/addresses/address.service.js';
 import {
   validateAssetForService,
@@ -22,6 +24,25 @@ import { emitAvailabilityChanged } from '@/modules/realtime/socket.service.js';
 import * as slotInventoryService from '@/modules/operations/slot-inventory.service.js';
 import * as zoneResolutionService from '@/modules/operations/zone-resolution.service.js';
 
+function buildSlotHoldKey(providerId: string, start: Date): string {
+  return `slot:${providerId}:${start.toISOString()}`;
+}
+
+async function acquireSlotHold(providerId: string, start: Date, ttlSeconds: number): Promise<boolean> {
+  const redis = await getRedisClient();
+  if (!redis) return true;
+
+  const key = buildSlotHoldKey(providerId, start);
+  const result = await redis.set(key, 'held', 'EX', ttlSeconds, 'NX');
+  return result === 'OK';
+}
+
+async function releaseSlotHold(providerId: string, start: Date): Promise<void> {
+  const redis = await getRedisClient();
+  if (!redis) return;
+  await redis.del(buildSlotHoldKey(providerId, start));
+}
+
 /**
  * Concurrency strategy (standalone MongoDB compatible):
  * 1. Re-verify slot availability from AvailabilityService.
@@ -39,13 +60,28 @@ export async function createSlotReservation(
     startDateTime: string;
     assetId?: string;
     homeId?: string;
+    durationMinutesOverride?: number;
+    homeHelp?: {
+      durationPackageId: string;
+      durationLabel: string;
+      durationMinutes: number;
+      quotedAmount: number;
+      generalNotes?: string;
+      tasks: Array<{
+        serviceId: string;
+        name: string;
+        priority: HomeHelpTaskPriority;
+        notes?: string;
+      }>;
+    };
   },
 ) {
   const service = await Service.findOne({ _id: input.serviceId, isActive: true });
   if (!service) throw new AppError('Service not found.', 404, ErrorCode.NOT_FOUND);
 
   const start = new Date(input.startDateTime);
-  const requiredMinutes = getRequiredSlotMinutes(service.estimatedDuration.maxMinutes);
+  const requiredMinutes =
+    input.durationMinutesOverride ?? getRequiredSlotMinutes(service.estimatedDuration.maxMinutes);
   const end = addMinutes(start, requiredMinutes);
   const expiresAt = addMinutes(new Date(), env.availability.slotReservationMinutes);
 
@@ -114,6 +150,16 @@ export async function createSlotReservation(
     );
   }
 
+  const holdSeconds = env.availability.slotReservationMinutes * 60;
+  const holdAcquired = await acquireSlotHold(input.providerId, start, holdSeconds);
+  if (!holdAcquired) {
+    throw new AppError(
+      'That time slot was just taken. Please choose another one.',
+      409,
+      ErrorCode.CONFLICT,
+    );
+  }
+
   let homeId = input.homeId;
   const assetId = input.assetId;
 
@@ -137,6 +183,24 @@ export async function createSlotReservation(
     status: SlotReservationStatus.HELD,
     expiresAt,
     serviceZoneId: zoneResolution.zone?.id,
+    homeHelp: input.homeHelp
+      ? {
+          durationPackageId: new Types.ObjectId(input.homeHelp.durationPackageId),
+          durationLabel: input.homeHelp.durationLabel,
+          durationMinutes: input.homeHelp.durationMinutes,
+          quotedAmount: input.homeHelp.quotedAmount,
+          generalNotes: input.homeHelp.generalNotes,
+          tasks: input.homeHelp.tasks.map((task) => ({
+            serviceId: new Types.ObjectId(task.serviceId),
+            name: task.name,
+            priority: task.priority,
+            notes: task.notes,
+          })),
+        }
+      : undefined,
+  }).catch(async (error) => {
+    await releaseSlotHold(input.providerId, start);
+    throw error;
   });
 
   emitAvailabilityChanged(input.providerId, dateStr, {
@@ -165,6 +229,7 @@ export async function consumeSlotReservation(reservationId: string, customerId: 
       ErrorCode.CONFLICT,
     );
   }
+  await releaseSlotHold(reservation.providerId.toString(), reservation.startDateTime);
   return reservation;
 }
 
@@ -178,6 +243,7 @@ export async function releaseSlotReservation(customerId: string, reservationId: 
 
   reservation.status = SlotReservationStatus.RELEASED;
   await reservation.save();
+  await releaseSlotHold(reservation.providerId.toString(), reservation.startDateTime);
 
   const schedule = await getProviderScheduleDocument(reservation.providerId.toString());
   const timezone = schedule?.timezone ?? 'Asia/Kolkata';

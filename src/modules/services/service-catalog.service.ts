@@ -108,7 +108,14 @@ export async function searchServices(query: SearchQuery, customerId?: string) {
   const regex = new RegExp(escapeRegex(query.q), 'i');
   const filter = {
     isActive: true,
-    $or: [{ name: regex }, { shortDescription: regex }, { description: regex }],
+    $or: [
+      { name: regex },
+      { shortDescription: regex },
+      { description: regex },
+      { keywords: regex },
+      { aliases: regex },
+      { searchText: regex },
+    ],
   };
   const total = await Service.countDocuments(filter);
   const services = await Service.find(filter)

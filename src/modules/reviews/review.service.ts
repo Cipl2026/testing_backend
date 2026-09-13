@@ -8,7 +8,9 @@ import {
 } from '@ghaarfix/shared-types';
 import { env } from '@/config/env.js';
 import { Booking } from '@/models/Booking.js';
+import { Notification } from '@/models/Notification.js';
 import { Review } from '@/models/Review.js';
+import { notifyBookingEvent } from '@/modules/notifications/notification.service.js';
 import { User } from '@/models/User.js';
 import { AdminAuditLog } from '@/models/AdminAuditLog.js';
 import { addTimelineEvent } from '@/modules/bookings/timeline.service.js';
@@ -164,14 +166,70 @@ export async function getBookingsNeedingReviewReminder(): Promise<string[]> {
   const bookings = await Booking.find({
     status: BookingStatus.COMPLETED,
     updatedAt: { $lte: cutoff },
-  }).select('_id customerId');
+    reviewReminderSentAt: { $exists: false },
+  }).select('_id');
 
-  const ids: string[] = [];
-  for (const b of bookings) {
-    const hasReview = await Review.exists({ bookingId: b._id });
-    if (!hasReview) ids.push(b._id.toString());
+  if (!bookings.length) return [];
+
+  const bookingIds = bookings.map((b) => b._id);
+  const reviewedBookingIds = await Review.distinct('bookingId', { bookingId: { $in: bookingIds } });
+  const reviewedSet = new Set(reviewedBookingIds.map((id) => id.toString()));
+
+  return bookingIds.map((id) => id.toString()).filter((id) => !reviewedSet.has(id));
+}
+
+/** Marks bookings that already received a review reminder so the cron job stops re-sending. */
+export async function backfillReviewReminderSentFlags(): Promise<number> {
+  const notifiedBookingIds = await Notification.distinct('data.bookingId', {
+    type: 'REVIEW_REMINDER',
+    'data.bookingId': { $exists: true, $ne: null },
+  });
+  if (!notifiedBookingIds.length) return 0;
+
+  const result = await Booking.updateMany(
+    {
+      _id: { $in: notifiedBookingIds },
+      reviewReminderSentAt: { $exists: false },
+    },
+    { $set: { reviewReminderSentAt: new Date() } },
+  );
+  return result.modifiedCount ?? 0;
+}
+
+export async function sendReviewReminderForBooking(bookingId: string): Promise<boolean> {
+  const booking = await Booking.findOneAndUpdate(
+    {
+      _id: bookingId,
+      status: BookingStatus.COMPLETED,
+      reviewReminderSentAt: { $exists: false },
+    },
+    { $set: { reviewReminderSentAt: new Date() } },
+    { new: true },
+  ).select('customerId');
+
+  if (!booking) return false;
+
+  const hasReview = await Review.exists({ bookingId: booking._id });
+  if (hasReview) return false;
+
+  await notifyBookingEvent(
+    booking.customerId.toString(),
+    'REVIEW_REMINDER',
+    'How was your service?',
+    'Share your experience with your professional.',
+    bookingId,
+  );
+  return true;
+}
+
+export async function processReviewReminders(): Promise<{ sent: number }> {
+  const bookingIds = await getBookingsNeedingReviewReminder();
+  let sent = 0;
+  for (const bookingId of bookingIds) {
+    const didSend = await sendReviewReminderForBooking(bookingId);
+    if (didSend) sent += 1;
   }
-  return ids;
+  return { sent };
 }
 
 function maskCustomerName(fullName?: string) {

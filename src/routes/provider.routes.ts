@@ -31,6 +31,13 @@ router.post(
 );
 
 router.get(
+  '/onboarding-status',
+  authenticate,
+  authorize(UserRole.PROVIDER),
+  providerController.getOnboardingStatus,
+);
+
+router.get(
   '/me/services',
   authenticate,
   authorize(UserRole.PROVIDER),

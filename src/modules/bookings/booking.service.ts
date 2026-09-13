@@ -11,15 +11,16 @@ import {
   ProviderServiceApprovalStatus,
   ProviderStatus,
   TimelineEventType,
-  UrgentDispatchTargetStatus,
   UrgentRequestStatus,
   UserRole,
 } from '@ghaarfix/shared-types';
 import { env } from '@/config/env.js';
 import { Booking } from '@/models/Booking.js';
+import { PriceChangeRequest } from '@/models/PriceChangeRequest.js';
+import { PriceChangeStatus } from '@ghaarfix/shared-types';
 import { UrgentRequest } from '@/models/UrgentRequest.js';
-import { UrgentDispatchTarget } from '@/models/UrgentDispatchTarget.js';
 import { customerCompletionOtp } from '@/modules/bookings/service-completion-otp.service.js';
+import { customerStartOtp } from '@/modules/bookings/service-start-otp.service.js';
 import { BookingIdempotency } from '@/models/BookingIdempotency.js';
 import { BookingParticipant } from '@/models/BookingParticipant.js';
 import { CustomerAddress } from '@/models/CustomerAddress.js';
@@ -30,6 +31,10 @@ import { ProviderService } from '@/models/ProviderService.js';
 import { Service } from '@/models/Service.js';
 import { User } from '@/models/User.js';
 import { transitionBookingStatus } from '@/modules/bookings/booking-status.service.js';
+import {
+  findAvailableProviderForBooking,
+  reassignPendingBookingProvider,
+} from '@/modules/bookings/provider-reassignment.service.js';
 import { addTimelineEvent, listTimelineEvents } from '@/modules/bookings/timeline.service.js';
 import { notifyBookingEvent } from '@/modules/notifications/notification.service.js';
 import { emitAvailabilityChanged, emitBookingStatusChanged, emitToProvider } from '@/modules/realtime/socket.service.js';
@@ -175,10 +180,13 @@ export async function createBookingFromReservation(
     (reservation.endDateTime.getTime() - reservation.startDateTime.getTime()) / 60000,
   );
 
-  const estimatedAmount =
+  let estimatedAmount =
     providerService.customPricing?.enabled && providerService.customPricing.startingPrice != null
       ? providerService.customPricing.startingPrice
       : (service.pricing.startingPrice ?? 0);
+  if (reservation.homeHelp?.quotedAmount != null) {
+    estimatedAmount = reservation.homeHelp.quotedAmount;
+  }
   const visitCharge = providerService.customPricing?.enabled
     ? providerService.customPricing.visitCharge
     : undefined;
@@ -260,7 +268,7 @@ export async function createBookingFromReservation(
   const booking = await Booking.create({
     bookingNumber,
     bookingType: BookingType.SCHEDULED,
-    source: BookingSource.SLOT_RESERVATION,
+    source: reservation.homeHelp ? BookingSource.HOME_HELP : BookingSource.SLOT_RESERVATION,
     customerId,
     providerId: reservation.providerId,
     serviceId: reservation.serviceId,
@@ -325,6 +333,21 @@ export async function createBookingFromReservation(
     assetId: assetId ? new mongoose.Types.ObjectId(assetId) : undefined,
     assetSnapshot,
     reschedule: { providerRescheduleCount: 0 },
+    homeHelp: reservation.homeHelp
+      ? {
+          durationPackageId: reservation.homeHelp.durationPackageId,
+          durationLabel: reservation.homeHelp.durationLabel,
+          durationMinutes: reservation.homeHelp.durationMinutes,
+          quotedAmount: reservation.homeHelp.quotedAmount,
+          generalNotes: reservation.homeHelp.generalNotes,
+          tasks: reservation.homeHelp.tasks.map((task) => ({
+            serviceId: task.serviceId,
+            name: task.name,
+            priority: task.priority,
+            notes: task.notes,
+          })),
+        }
+      : undefined,
   });
 
   const payment = await Payment.create({
@@ -498,8 +521,13 @@ export async function listCustomerBookings(
 
 export async function getCustomerBooking(customerId: string, bookingId: string) {
   const booking = await findBookingForCustomer(customerId, bookingId);
-  if (booking.status === BookingStatus.IN_PROGRESS) {
-    const withOtp = await Booking.findById(bookingId).select('+tracking.serviceCompletionOtp');
+  if (
+    booking.status === BookingStatus.IN_PROGRESS ||
+    booking.status === BookingStatus.PROVIDER_ARRIVED
+  ) {
+    const withOtp = await Booking.findById(bookingId).select(
+      '+tracking.serviceCompletionOtp +tracking.serviceStartOtp',
+    );
     if (withOtp?.tracking) {
       booking.tracking = withOtp.tracking;
     }
@@ -507,6 +535,26 @@ export async function getCustomerBooking(customerId: string, bookingId: string) 
   const timeline = await listTimelineEvents(bookingId);
   const participantSummary = await getBookingParticipantSummary(bookingId);
   const serviceCompletionOtp = customerCompletionOtp(booking);
+  const serviceStartOtp = customerStartOtp(booking);
+
+  let noShowEligibleAt: string | undefined;
+  if (
+    booking.bookingType === BookingType.URGENT &&
+    [BookingStatus.CONFIRMED, BookingStatus.PROVIDER_EN_ROUTE, BookingStatus.PROVIDER_ARRIVED].includes(
+      booking.status,
+    )
+  ) {
+    const { getDispatchConfig } = await import('@/modules/urgent/urgent-config.service.js');
+    const dispatchConfig = await getDispatchConfig();
+    const baseTime = booking.createdAt ?? booking.updatedAt;
+    noShowEligibleAt = new Date(
+      baseTime.getTime() + dispatchConfig.noShowMinutes * 60 * 1000,
+    ).toISOString();
+  }
+  const pendingPriceChange = await PriceChangeRequest.findOne({
+    bookingId,
+    status: PriceChangeStatus.PENDING,
+  });
 
   let providerContact: { phone: string } | undefined;
   const contactStatuses = new Set([
@@ -526,7 +574,28 @@ export async function getCustomerBooking(customerId: string, bookingId: string) 
   return serializeBookingDetail(booking, timeline, {
     participantSummary,
     serviceCompletionOtp,
+    serviceStartOtp,
+    noShowEligibleAt,
+    providerRequestExpiredAt: booking.providerRequestExpiredAt?.toISOString(),
+    providerConfirmation: booking.providerConfirmation
+      ? {
+          status: booking.providerConfirmation.status,
+          confirmedAt: booking.providerConfirmation.confirmedAt?.toISOString(),
+        }
+      : undefined,
     providerContact,
+    priceChangeRequest: pendingPriceChange
+      ? {
+          id: pendingPriceChange._id.toString(),
+          originalAmount: pendingPriceChange.originalAmount,
+          proposedAmount: pendingPriceChange.proposedAmount,
+          difference: pendingPriceChange.difference,
+          reason: pendingPriceChange.reason,
+          items: pendingPriceChange.items,
+          status: pendingPriceChange.status,
+          createdAt: pendingPriceChange.createdAt.toISOString(),
+        }
+      : undefined,
   });
 }
 
@@ -585,8 +654,104 @@ export async function cancelCustomerBooking(customerId: string, bookingId: strin
 }
 
 export async function expirePendingProviderRequests() {
-  // Bookings stay pending until the customer cancels or the provider accepts/rejects with a reason.
-  return 0;
+  const now = new Date();
+  const bookings = await Booking.find({
+    status: BookingStatus.PENDING_PROVIDER,
+    providerRequestStatus: ProviderRequestStatus.PENDING,
+    providerResponseExpiresAt: { $lte: now },
+    providerRequestExpiredAt: { $exists: false },
+  }).limit(100);
+
+  let expired = 0;
+  for (const booking of bookings) {
+    booking.providerRequestExpiredAt = now;
+    await booking.save();
+
+    await addTimelineEvent({
+      bookingId: booking._id.toString(),
+      type: TimelineEventType.PROVIDER_REQUEST_EXPIRED,
+      actorRole: UserRole.ADMIN,
+      metadata: { providerId: booking.providerId.toString() },
+    });
+
+    await notifyBookingEvent(
+      booking.customerId.toString(),
+      'PROVIDER_REQUEST_EXPIRED',
+      'Professional has not responded',
+      `${booking.providerSnapshot.fullName} has not accepted yet. You can wait, find another professional, or cancel.`,
+      booking._id.toString(),
+    );
+
+    emitBookingStatusChanged(booking.customerId.toString(), {
+      bookingId: booking._id.toString(),
+      status: booking.status,
+      action: 'PROVIDER_REQUEST_EXPIRED',
+    });
+
+    expired += 1;
+  }
+
+  return expired;
+}
+
+export async function waitForProviderResponse(customerId: string, bookingId: string) {
+  const booking = await findBookingForCustomer(customerId, bookingId);
+  if (booking.status !== BookingStatus.PENDING_PROVIDER) {
+    throw new AppError('This booking is no longer waiting for acceptance.', 409, ErrorCode.CONFLICT);
+  }
+  if (!booking.providerRequestExpiredAt) {
+    throw new AppError('You can extend the wait after the response window expires.', 409, ErrorCode.CONFLICT);
+  }
+
+  const waitCount = booking.providerResponseWaitCount ?? 0;
+  if (waitCount >= 2) {
+    throw new AppError('Maximum wait extensions reached. Please find another professional or cancel.', 409, ErrorCode.CONFLICT);
+  }
+
+  booking.providerResponseExpiresAt = new Date(
+    Date.now() + env.booking.providerResponseTimeoutMinutes * 60 * 1000,
+  );
+  booking.providerRequestExpiredAt = undefined;
+  booking.providerResponseWaitCount = waitCount + 1;
+  await booking.save();
+
+  await notifyBookingEvent(
+    customerId,
+    'PROVIDER_WAIT_EXTENDED',
+    'Waiting a little longer',
+    `We gave ${booking.providerSnapshot.fullName} more time to accept your booking.`,
+    bookingId,
+  );
+
+  return getCustomerBooking(customerId, bookingId);
+}
+
+export async function findAnotherProviderForBooking(
+  customerId: string,
+  bookingId: string,
+  preferredProviderId?: string,
+) {
+  const booking = await findBookingForCustomer(customerId, bookingId);
+  if (booking.status !== BookingStatus.PENDING_PROVIDER) {
+    throw new AppError('This booking is no longer waiting for acceptance.', 409, ErrorCode.CONFLICT);
+  }
+
+  const newProviderId =
+    preferredProviderId ?? (await findAvailableProviderForBooking(booking));
+  if (!newProviderId) {
+    throw new AppError('No alternate professionals are available right now.', 409, ErrorCode.CONFLICT);
+  }
+
+  const reassigned = await reassignPendingBookingProvider(
+    booking,
+    newProviderId,
+    'customer-requested-replacement',
+  );
+  if (!reassigned) {
+    throw new AppError('Could not assign another professional.', 409, ErrorCode.CONFLICT);
+  }
+
+  return getCustomerBooking(customerId, bookingId);
 }
 
 /**
@@ -635,7 +800,9 @@ export async function redispatchAfterNoShow(
   // assignment time for urgent bookings.
   const acceptedAt = booking.createdAt ?? booking.updatedAt;
   const elapsedMs = Date.now() - new Date(acceptedAt).getTime();
-  const noShowWindowMs = env.urgent.noShowMinutes * 60 * 1000;
+  const { getDispatchConfig } = await import('@/modules/urgent/urgent-config.service.js');
+  const dispatchConfig = await getDispatchConfig();
+  const noShowWindowMs = dispatchConfig.noShowMinutes * 60 * 1000;
   if (elapsedMs < noShowWindowMs) {
     const remainingMin = Math.ceil((noShowWindowMs - elapsedMs) / 60000);
     throw new AppError(
@@ -687,23 +854,15 @@ export async function redispatchAfterNoShow(
     metadata: { reason: `no-show: ${reason}`, redispatch: true },
   });
 
-  // 2. Mark the provider's invitation as REJECTED so they are excluded on restart.
-  await UrgentDispatchTarget.updateOne(
-    { urgentRequestId: request._id, providerId: claimed.providerId },
-    { status: UrgentDispatchTargetStatus.REJECTED, respondedAt: new Date() },
+  const { resetUrgentRequestForRedispatch } = await import(
+    '@/modules/urgent/urgent-redispatch.service.js'
   );
-
-  // 3 + 4. Reset the request and restart dispatch.
-  request.status = UrgentRequestStatus.SEARCHING;
-  request.providerId = undefined;
-  request.acceptedAt = undefined;
-  request.bookingId = undefined;
-  request.completedAt = undefined;
-  request.expiresAt = new Date(Date.now() + env.urgent.requestTimeoutSeconds * 1000);
-  request.searchConfig.currentRadiusKm = 1;
-  request.searchConfig.notifiedCount = 0;
-  request.searchConfig.waveIndex = 0;
-  await request.save();
+  await resetUrgentRequestForRedispatch({
+    request,
+    rejectedProviderId: claimed.providerId.toString(),
+    customerId,
+    resetEligiblePool: false,
+  });
 
   const { setProviderOnline } = await import('@/modules/presence/presence.service.js');
   await setProviderOnline(claimed.providerId.toString());
@@ -726,9 +885,6 @@ export async function redispatchAfterNoShow(
     'Your professional did not arrive on time. We are searching for someone else nearby.',
     claimed._id.toString(),
   );
-
-  const { startUrgentSearchWaves } = await import('@/modules/urgent/urgent-wave.service.js');
-  await startUrgentSearchWaves(request._id.toString());
 
   logger.info('urgent no-show redispatch started', {
     bookingId: claimed._id.toString(),

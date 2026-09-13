@@ -14,6 +14,7 @@ import {
   priceChangeRequestBodySchema,
   rejectBookingBodySchema,
   rescheduleRequestBodySchema,
+  startServiceBodySchema,
 } from '@/validators/booking.js';
 
 const router = Router();
@@ -91,10 +92,18 @@ router.post(
   bookingController.arrive,
 );
 router.post(
+  '/bookings/:bookingId/reconfirm',
+  authenticate,
+  authorize(UserRole.PROVIDER),
+  validateParams(bookingIdParamSchema),
+  bookingController.confirmProviderBookingAction,
+);
+router.post(
   '/bookings/:bookingId/start',
   authenticate,
   authorize(UserRole.PROVIDER),
   validateParams(bookingIdParamSchema),
+  validateBody(startServiceBodySchema),
   bookingController.startService,
 );
 router.post(

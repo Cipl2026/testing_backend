@@ -42,9 +42,13 @@ import notificationRoutes from '@/routes/notification.routes.js';
 import urgentRoutes from '@/routes/urgent.routes.js';
 import paymentRoutes from '@/routes/payment.routes.js';
 import providerRoutes from '@/routes/provider.routes.js';
+import appVersionRoutes from '@/routes/app-version.routes.js';
+import homeHelpRoutes from '@/routes/home-help.routes.js';
 
 const router = Router();
 
+router.use('/app', appVersionRoutes);
+router.use('/home-help', homeHelpRoutes);
 router.use('/health', healthRoutes);
 router.use('/home-carousel', homeCarouselRoutes);
 router.use('/auth', authRoutes);

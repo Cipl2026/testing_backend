@@ -30,8 +30,18 @@ import {
   issueServiceCompletionOtp,
   verifyServiceCompletionOtp,
 } from '@/modules/bookings/service-completion-otp.service.js';
+import {
+  clearServiceStartOtp,
+  emitServiceStartOtp,
+  issueServiceStartOtp,
+  verifyServiceStartOtp,
+} from '@/modules/bookings/service-start-otp.service.js';
+import { initProviderConfirmationOnBooking } from '@/modules/bookings/provider-confirmation.service.js';
 import { stopTrackingOnArrival } from '@/modules/tracking/location-tracking.service.js';
 import { recalculateTrustMetrics } from '@/modules/trust/trust-metrics.service.js';
+import { getOrCreateChecklistForService } from '@/modules/trust-protection/quality-checklist.service.js';
+import { ServiceEvidence } from '@/models/ServiceEvidence.js';
+import { ServiceEvidenceType } from '@ghaarfix/shared-types';
 import { getBlockingIntervals } from '@/modules/provider-availability/availability.service.js';
 import { WorkOrder, SLATracker } from '@/models/OrganizationOperations.js';
 import { AIAnalysisResult } from '@/models/Intelligence.js';
@@ -134,11 +144,14 @@ export async function getProviderBooking(providerId: string, bookingId: string) 
 async function getOwnedBooking(
   providerId: string,
   bookingId: string,
-  options?: { includeCompletionOtp?: boolean },
+  options?: { includeCompletionOtp?: boolean; includeStartOtp?: boolean },
 ) {
   const query = Booking.findOne({ _id: bookingId, providerId });
   if (options?.includeCompletionOtp) {
-    query.select('+tracking.serviceCompletionOtp');
+    query.select('+tracking.serviceCompletionOtp +tracking.serviceStartOtp');
+  }
+  if (options?.includeStartOtp) {
+    query.select('+tracking.serviceStartOtp');
   }
   const booking = await query;
   if (!booking) throw new AppError('Booking not found.', 404, ErrorCode.NOT_FOUND);
@@ -153,6 +166,7 @@ export async function acceptBooking(providerId: string, bookingId: string) {
 
   booking.status = transitionBookingStatus(booking.status, 'PROVIDER_ACCEPT', UserRole.PROVIDER);
   booking.providerRequestStatus = ProviderRequestStatus.ACCEPTED;
+  initProviderConfirmationOnBooking(booking);
   await booking.save();
 
   await consumeEntitlementForBooking(booking);
@@ -230,11 +244,37 @@ export async function updateBookingStatusAction(
   providerId: string,
   bookingId: string,
   action: 'PROVIDER_EN_ROUTE' | 'PROVIDER_ARRIVE' | 'START_SERVICE' | 'COMPLETE_SERVICE',
-  options?: { completionOtp?: string },
+  options?: { completionOtp?: string; startOtp?: string },
 ) {
   const booking = await getOwnedBooking(providerId, bookingId, {
     includeCompletionOtp: action === 'COMPLETE_SERVICE',
+    includeStartOtp: action === 'START_SERVICE',
   });
+
+  if (action === 'START_SERVICE') {
+    const startVerification = verifyServiceStartOtp(booking, options?.startOtp ?? '');
+    if (!startVerification.ok) {
+      await booking.save();
+      throw new AppError(startVerification.reason, 400, ErrorCode.VALIDATION_ERROR);
+    }
+
+    const checklist = await getOrCreateChecklistForService(booking.serviceId.toString());
+    if (checklist.requiredEvidence.includes(ServiceEvidenceType.BEFORE)) {
+      const beforeCount = await ServiceEvidence.countDocuments({
+        bookingId: booking._id,
+        type: ServiceEvidenceType.BEFORE,
+      });
+      if (beforeCount === 0) {
+        throw new AppError(
+          'Upload a before photo before starting the service.',
+          400,
+          ErrorCode.VALIDATION_ERROR,
+        );
+      }
+    }
+
+    clearServiceStartOtp(booking);
+  }
 
   if (action === 'COMPLETE_SERVICE') {
     const verification = verifyServiceCompletionOtp(booking, options?.completionOtp ?? '');
@@ -276,6 +316,8 @@ export async function updateBookingStatusAction(
   if (action === 'PROVIDER_ARRIVE') {
     if (!booking.tracking) booking.tracking = { state: TrackingState.NOT_TRACKING };
     booking.tracking.state = TrackingState.ARRIVED;
+    const startOtp = issueServiceStartOtp(booking);
+    emitServiceStartOtp(booking.customerId.toString(), bookingId, startOtp);
   }
 
   if (action === 'START_SERVICE') {
@@ -616,6 +658,18 @@ export async function respondToPriceChange(customerId: string, bookingId: string
     });
   }
   await request.save();
+
+  if (booking.providerId) {
+    await notifyBookingEvent(
+      booking.providerId.toString(),
+      accept ? 'PRICE_CHANGE_APPROVED' : 'PRICE_CHANGE_REJECTED',
+      accept ? 'Price change approved' : 'Price change rejected',
+      accept
+        ? 'The customer approved your price change request.'
+        : 'The customer rejected your price change request.',
+      bookingId,
+    );
+  }
 
   return serializeBookingDetail(booking, await listTimelineEvents(bookingId), {
     priceChangeRequest: request,

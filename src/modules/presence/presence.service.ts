@@ -1,10 +1,17 @@
-import { ProviderPresenceStatus } from '@ghaarfix/shared-types';
+import { ProviderPresenceStatus, ProviderStatus, ProviderServiceApprovalStatus, ErrorCode } from '@ghaarfix/shared-types';
 import { env } from '@/config/env.js';
 import { ProviderPresence } from '@/models/ProviderPresence.js';
+import { ProviderProfile } from '@/models/ProviderProfile.js';
+import { ProviderService } from '@/models/ProviderService.js';
 import { Booking } from '@/models/Booking.js';
 import { BLOCKING_BOOKING_STATUSES } from '@ghaarfix/shared-types';
 import { UrgentRequest } from '@/models/UrgentRequest.js';
 import { UrgentRequestStatus } from '@ghaarfix/shared-types';
+import { AppError } from '@/utils/AppError.js';
+import {
+  removeProviderGeo,
+  upsertProviderGeo,
+} from '@/infra/provider-geo.service.js';
 
 function validateCoordinates(longitude: number, latitude: number): void {
   if (longitude < -180 || longitude > 180 || latitude < -90 || latitude > 90) {
@@ -35,7 +42,41 @@ export async function getOrCreatePresence(providerId: string) {
   return presence;
 }
 
+async function assertProviderCanGoOnline(providerId: string): Promise<void> {
+  const profile = await ProviderProfile.findOne({ userId: providerId });
+  if (!profile) {
+    throw new AppError('Complete your provider profile before going online.', 403, ErrorCode.FORBIDDEN);
+  }
+  if (profile.providerStatus !== ProviderStatus.ACTIVE) {
+    throw new AppError(
+      'Your account must be approved by admin before you can go online.',
+      403,
+      ErrorCode.FORBIDDEN,
+    );
+  }
+  if (!profile.isProfileComplete) {
+    throw new AppError('Complete your profile setup before going online.', 403, ErrorCode.FORBIDDEN);
+  }
+  if (!profile.isVerified) {
+    throw new AppError('Identity verification must be approved before going online.', 403, ErrorCode.FORBIDDEN);
+  }
+
+  const approvedServices = await ProviderService.countDocuments({
+    providerId,
+    approvalStatus: ProviderServiceApprovalStatus.APPROVED,
+    isActive: true,
+  });
+  if (approvedServices < 1) {
+    throw new AppError(
+      'At least one service must be approved by admin before going online.',
+      403,
+      ErrorCode.FORBIDDEN,
+    );
+  }
+}
+
 export async function setProviderOnline(providerId: string) {
+  await assertProviderCanGoOnline(providerId);
   const presence = await getOrCreatePresence(providerId);
   presence.status = ProviderPresenceStatus.ONLINE;
   presence.isOnline = true;
@@ -43,6 +84,10 @@ export async function setProviderOnline(providerId: string) {
   presence.lastSeenAt = new Date();
   presence.activeJobCount = await countActiveJobs(providerId);
   await presence.save();
+  if (presence.currentLocation?.coordinates?.length === 2) {
+    const [longitude, latitude] = presence.currentLocation.coordinates;
+    void upsertProviderGeo(providerId, longitude, latitude);
+  }
   return serializePresence(presence);
 }
 
@@ -53,6 +98,7 @@ export async function setProviderOffline(providerId: string) {
   presence.urgentAvailable = false;
   presence.lastSeenAt = new Date();
   await presence.save();
+  void removeProviderGeo(providerId);
   return serializePresence(presence);
 }
 
@@ -64,6 +110,7 @@ export async function setProviderBusy(providerId: string) {
   presence.activeJobCount = await countActiveJobs(providerId);
   presence.lastSeenAt = new Date();
   await presence.save();
+  void removeProviderGeo(providerId);
   return serializePresence(presence);
 }
 
@@ -85,6 +132,17 @@ export async function heartbeatProvider(
   }
 
   await presence.save();
+  if (
+    presence.isOnline &&
+    presence.urgentAvailable &&
+    presence.status === ProviderPresenceStatus.ONLINE &&
+    presence.currentLocation?.coordinates?.length === 2
+  ) {
+    const [longitude, latitude] = presence.currentLocation.coordinates;
+    void upsertProviderGeo(providerId, longitude, latitude);
+  } else {
+    void removeProviderGeo(providerId);
+  }
   return serializePresence(presence);
 }
 
@@ -120,10 +178,16 @@ export async function registerCustomerPushToken(
 
 export async function expireStalePresence(): Promise<number> {
   const cutoff = new Date(Date.now() - env.urgent.presenceTimeoutMinutes * 60 * 1000);
+  const stale = await ProviderPresence.find({
+    isOnline: true,
+    lastSeenAt: { $lt: cutoff },
+  }).select('providerId');
+
+  if (!stale.length) return 0;
+
   const result = await ProviderPresence.updateMany(
     {
-      isOnline: true,
-      lastSeenAt: { $lt: cutoff },
+      _id: { $in: stale.map((presence) => presence._id) },
     },
     {
       $set: {
@@ -133,6 +197,8 @@ export async function expireStalePresence(): Promise<number> {
       },
     },
   );
+
+  await Promise.all(stale.map((presence) => removeProviderGeo(presence.providerId.toString())));
   return result.modifiedCount;
 }
 

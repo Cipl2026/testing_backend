@@ -16,6 +16,7 @@ import { Service } from '@/models/Service.js';
 import { SlotReservation } from '@/models/SlotReservation.js';
 import { User } from '@/models/User.js';
 import { getCustomerAddressForMatching } from '@/modules/addresses/address.service.js';
+import { getProviderTrustMetrics } from '@/modules/trust/trust-metrics.service.js';
 import { providerMatchesAddress } from '@/modules/provider-availability/service-area.service.js';
 import { getProviderScheduleDocument } from '@/modules/provider-availability/schedule.service.js';
 import { getTimeOffInRange } from '@/modules/provider-availability/time-off.service.js';
@@ -293,6 +294,7 @@ export async function discoverProvidersForService(
       const profile = profileMap.get(item.providerId)!;
       const ps = psMap.get(item.providerId)!;
       const user = users.find((u) => u._id.toString() === item.providerId)!;
+      const trust = await getProviderTrustMetrics(item.providerId);
 
       let nextAvailability: string | null = null;
       const schedule = await getProviderScheduleDocument(item.providerId);
@@ -325,6 +327,15 @@ export async function discoverProvidersForService(
           currency: service.pricing.currency,
         },
         availabilitySummary: nextAvailability,
+        trust: {
+          averageRating: trust.averageRating,
+          reviewCount: trust.reviewCount,
+          completedJobs: trust.completedJobs,
+          onTimePercentage: trust.onTimePercentage,
+          cancellationRate: trust.cancellationRate,
+          trustScore: trust.trustScore,
+          isVerified: trust.isVerified,
+        },
       };
     }),
   );

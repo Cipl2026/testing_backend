@@ -1,5 +1,19 @@
 import mongoose, { type Document, Schema, Types } from 'mongoose';
-import { SlotReservationStatus } from '@ghaarfix/shared-types';
+import { SlotReservationStatus, type HomeHelpTaskPriority } from '@ghaarfix/shared-types';
+
+export interface HomeHelpReservationPayload {
+  durationPackageId: Types.ObjectId;
+  durationLabel: string;
+  durationMinutes: number;
+  quotedAmount: number;
+  generalNotes?: string;
+  tasks: Array<{
+    serviceId: Types.ObjectId;
+    name: string;
+    priority: HomeHelpTaskPriority;
+    notes?: string;
+  }>;
+}
 
 export interface ISlotReservation extends Document {
   providerId: Types.ObjectId;
@@ -13,6 +27,7 @@ export interface ISlotReservation extends Document {
   status: SlotReservationStatus;
   expiresAt: Date;
   serviceZoneId?: Types.ObjectId;
+  homeHelp?: HomeHelpReservationPayload;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -35,6 +50,21 @@ const slotReservationSchema = new Schema<ISlotReservation>(
     },
     expiresAt: { type: Date, required: true },
     serviceZoneId: { type: Schema.Types.ObjectId, ref: 'ServiceZone', sparse: true, index: true },
+    homeHelp: {
+      durationPackageId: { type: Schema.Types.ObjectId, ref: 'HomeHelpDurationPackage' },
+      durationLabel: String,
+      durationMinutes: Number,
+      quotedAmount: Number,
+      generalNotes: String,
+      tasks: [
+        {
+          serviceId: { type: Schema.Types.ObjectId, ref: 'Service' },
+          name: String,
+          priority: { type: String, enum: ['HIGH', 'MEDIUM', 'LOW'] },
+          notes: String,
+        },
+      ],
+    },
   },
   { timestamps: true },
 );

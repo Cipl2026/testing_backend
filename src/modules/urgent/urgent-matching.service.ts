@@ -21,6 +21,7 @@ import {
 } from '@/modules/operations/provider-capacity.service.js';
 import { env } from '@/config/env.js';
 import type { ICustomerAddress } from '@/models/CustomerAddress.js';
+import { findNearbyProviderIds } from '@/infra/provider-geo.service.js';
 
 export interface MatchedProvider {
   providerId: string;
@@ -77,12 +78,36 @@ async function findNearbyPresences(
   staleLocationCutoff: Date,
 ) {
   const [lng, lat] = coordinates;
-  return ProviderPresence.find({
+  const baseFilter = {
     isOnline: true,
     urgentAvailable: true,
     status: ProviderPresenceStatus.ONLINE,
     lastSeenAt: { $gte: stalePresenceCutoff },
     locationUpdatedAt: { $gte: staleLocationCutoff },
+  };
+
+  const redisHits = await findNearbyProviderIds({
+    longitude: lng,
+    latitude: lat,
+    radiusMeters: maxDistanceMeters,
+    limit: 100,
+  });
+
+  if (redisHits) {
+    if (!redisHits.length) return [];
+    const order = new Map(redisHits.map((hit, index) => [hit.providerId, index]));
+    const presences = await ProviderPresence.find({
+      ...baseFilter,
+      providerId: { $in: redisHits.map((hit) => hit.providerId) },
+    }).limit(100);
+    return presences.sort(
+      (a, b) =>
+        (order.get(a.providerId.toString()) ?? 999) - (order.get(b.providerId.toString()) ?? 999),
+    );
+  }
+
+  return ProviderPresence.find({
+    ...baseFilter,
     currentLocation: {
       $nearSphere: {
         $geometry: { type: 'Point', coordinates: [lng, lat] },
@@ -102,6 +127,43 @@ async function getRecentlyOfferedProviderIds(cooldownMs: number): Promise<Set<st
   return new Set(targets.map((t) => t.providerId.toString()));
 }
 
+async function getProvidersCoveringAllServices(
+  providerIds: string[],
+  serviceIds: string[],
+  urgentServiceId?: string,
+): Promise<Set<string>> {
+  if (!serviceIds.length || serviceIds.length === 1) {
+    return new Set(providerIds);
+  }
+
+  const rows = await ProviderService.find({
+    providerId: { $in: providerIds },
+    serviceId: { $in: serviceIds },
+    approvalStatus: ProviderServiceApprovalStatus.APPROVED,
+    isActive: true,
+  }).select('providerId serviceId supportsUrgent isUrgentEnabled');
+
+  const coverage = new Map<string, Map<string, (typeof rows)[number]>>();
+  for (const row of rows) {
+    const providerId = row.providerId.toString();
+    if (!coverage.has(providerId)) coverage.set(providerId, new Map());
+    coverage.get(providerId)!.set(row.serviceId.toString(), row);
+  }
+
+  const eligible = new Set<string>();
+  for (const providerId of providerIds) {
+    const services = coverage.get(providerId);
+    if (!services) continue;
+    if (!serviceIds.every((serviceId) => services.has(serviceId))) continue;
+    if (urgentServiceId) {
+      const urgentService = services.get(urgentServiceId);
+      if (!urgentService?.supportsUrgent || !urgentService?.isUrgentEnabled) continue;
+    }
+    eligible.add(providerId);
+  }
+  return eligible;
+}
+
 export async function matchUrgentProviders(input: {
   serviceId: string;
   coordinates: [number, number];
@@ -112,6 +174,7 @@ export async function matchUrgentProviders(input: {
     'postalCode' | 'city' | 'location' | 'customerId'
   >;
   excludeProviderIds?: string[];
+  requiredServiceIds?: string[];
 }): Promise<MatchedProvider[]> {
   const [lng, lat] = input.coordinates;
   const maxDistanceMeters = input.maxDistanceKm * 1000;
@@ -164,6 +227,14 @@ export async function matchUrgentProviders(input: {
   const activeUserIds = new Set(users.map((u) => u._id.toString()));
   const activeProfileIds = new Set(profiles.map((p) => p.userId.toString()));
   const eligibleServiceIds = new Set(providerServices.map((ps) => ps.providerId.toString()));
+  const multiSkillIds =
+    input.requiredServiceIds && input.requiredServiceIds.length > 1
+      ? await getProvidersCoveringAllServices(
+          providerIds,
+          input.requiredServiceIds,
+          input.serviceId,
+        )
+      : null;
 
   const candidates: MatchedProvider[] = [];
 
@@ -172,6 +243,7 @@ export async function matchUrgentProviders(input: {
     if (!activeUserIds.has(providerId)) continue;
     if (!activeProfileIds.has(providerId)) continue;
     if (!eligibleServiceIds.has(providerId)) continue;
+    if (multiSkillIds && !multiSkillIds.has(providerId)) continue;
     if (!presence.currentLocation?.coordinates) continue;
 
     const [pLng, pLat] = presence.currentLocation.coordinates;
@@ -241,6 +313,7 @@ export async function matchOfflineUrgentProviders(input: {
     'postalCode' | 'city' | 'location' | 'customerId'
   >;
   excludeProviderIds?: string[];
+  requiredServiceIds?: string[];
 }): Promise<MatchedProvider[]> {
   const [lng, lat] = input.coordinates;
   const maxDistanceMeters = input.maxDistanceKm * 1000;
@@ -256,9 +329,18 @@ export async function matchOfflineUrgentProviders(input: {
     isUrgentEnabled: true,
   }).select('providerId');
 
-  const providerIds = [
+  let providerIds = [
     ...new Set(providerServices.map((ps) => ps.providerId.toString())),
   ].filter((id) => !exclude.has(id));
+
+  if (input.requiredServiceIds && input.requiredServiceIds.length > 1) {
+    const covered = await getProvidersCoveringAllServices(
+      providerIds,
+      input.requiredServiceIds,
+      input.serviceId,
+    );
+    providerIds = providerIds.filter((id) => covered.has(id));
+  }
 
   if (!providerIds.length) return [];
 

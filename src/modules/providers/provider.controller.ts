@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import * as providerService from '@/modules/providers/provider.service.js';
 import * as providerFinanceService from '@/modules/finance/provider-finance.service.js';
+import { getProviderOnboardingStatus } from '@/modules/providers/provider-onboarding.service.js';
 import { storeImage } from '@/modules/storage/storage.service.js';
 import { asyncHandler } from '@/utils/asyncHandler.js';
 import { sendSuccess } from '@/utils/apiResponse.js';
@@ -27,4 +28,9 @@ export const uploadProfileImage = asyncHandler(async (req: Request, res: Respons
 export const getEarnings = asyncHandler(async (req: Request, res: Response) => {
   const data = await providerFinanceService.getProviderFinanceEarnings(req.auth!.userId);
   sendSuccess(res, 'Earnings fetched successfully', data);
+});
+
+export const getOnboardingStatus = asyncHandler(async (req: Request, res: Response) => {
+  const data = await getProviderOnboardingStatus(req.auth!.userId);
+  sendSuccess(res, 'Onboarding status fetched successfully', data);
 });

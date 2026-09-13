@@ -47,6 +47,7 @@ export interface ApiErrorResponse {
 
 export * from './catalog.js';
 export * from './booking.js';
+export * from './home-help.js';
 export * from './urgent.js';
 export * from './post-service.js';
 export * from './home-health.js';

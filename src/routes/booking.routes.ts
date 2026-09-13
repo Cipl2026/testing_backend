@@ -9,6 +9,7 @@ import {
   bookingListQuerySchema,
   cancelBookingBodySchema,
   createBookingBodySchema,
+  findAnotherProviderBodySchema,
   priceChangeResponseBodySchema,
   rescheduleResponseBodySchema,
 } from '@/validators/booking.js';
@@ -75,6 +76,28 @@ router.post(
   validateParams(bookingIdParamSchema),
   validateBody(priceChangeResponseBodySchema),
   bookingController.respondPriceChange,
+);
+router.post(
+  '/:bookingId/wait-for-provider',
+  authenticate,
+  authorize(UserRole.CUSTOMER),
+  validateParams(bookingIdParamSchema),
+  bookingController.waitForProvider,
+);
+router.post(
+  '/:bookingId/find-another-provider',
+  authenticate,
+  authorize(UserRole.CUSTOMER),
+  validateParams(bookingIdParamSchema),
+  validateBody(findAnotherProviderBodySchema),
+  bookingController.findAnotherProvider,
+);
+router.post(
+  '/:bookingId/request-replacement',
+  authenticate,
+  authorize(UserRole.CUSTOMER),
+  validateParams(bookingIdParamSchema),
+  bookingController.requestReplacement,
 );
 
 router.get(

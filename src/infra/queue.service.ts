@@ -109,12 +109,13 @@ export async function enqueueJob(
   queueName: QueueName,
   jobName: string,
   data: Record<string, unknown>,
-  opts?: { priority?: number; delayMs?: number },
+  opts?: { priority?: number; delayMs?: number; jobId?: string },
 ): Promise<string | null> {
   if (!isRedisEnabled()) return null;
   const bundle = bundles.get(queueName);
   if (!bundle) return null;
   const job = await bundle.queue.add(jobName, data, {
+    jobId: opts?.jobId,
     priority: opts?.priority ?? QUEUE_PRIORITIES[queueName],
     delay: opts?.delayMs,
     attempts: 3,
@@ -123,6 +124,14 @@ export async function enqueueJob(
     removeOnFail: false,
   });
   return job.id ?? null;
+}
+
+export async function cancelQueuedJob(queueName: QueueName, jobId: string): Promise<void> {
+  if (!isRedisEnabled()) return;
+  const bundle = bundles.get(queueName);
+  if (!bundle) return;
+  const job = await bundle.queue.getJob(jobId);
+  if (job) await job.remove();
 }
 
 export async function getQueueStats(): Promise<

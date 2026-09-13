@@ -1,6 +1,7 @@
 import * as bookingAdminService from '@/modules/bookings/booking-admin.service.js';
 import * as bookingProviderService from '@/modules/bookings/booking-provider.service.js';
 import * as bookingService from '@/modules/bookings/booking.service.js';
+import { confirmProviderBooking, requestReplacementForMissedConfirmation } from '@/modules/bookings/provider-confirmation.service.js';
 import { asyncHandler } from '@/utils/asyncHandler.js';
 import { sendSuccess } from '@/utils/apiResponse.js';
 
@@ -61,6 +62,35 @@ export const respondPriceChange = asyncHandler(async (req, res) => {
     req.body.accept,
   );
   sendSuccess(res, 'Price change response recorded successfully', booking);
+});
+
+export const waitForProvider = asyncHandler(async (req, res) => {
+  const booking = await bookingService.waitForProviderResponse(
+    req.auth!.userId,
+    String(req.params.bookingId),
+  );
+  sendSuccess(res, 'We gave your professional more time to respond.', booking);
+});
+
+export const findAnotherProvider = asyncHandler(async (req, res) => {
+  const booking = await bookingService.findAnotherProviderForBooking(
+    req.auth!.userId,
+    String(req.params.bookingId),
+    req.body.providerId,
+  );
+  sendSuccess(res, 'Another professional will review your booking.', booking);
+});
+
+export const requestReplacement = asyncHandler(async (req, res) => {
+  await requestReplacementForMissedConfirmation(
+    req.auth!.userId,
+    String(req.params.bookingId),
+  );
+  const booking = await bookingService.getCustomerBooking(
+    req.auth!.userId,
+    String(req.params.bookingId),
+  );
+  sendSuccess(res, 'Replacement professional assigned.', booking);
 });
 
 export const listProviderBookings = asyncHandler(async (req, res) => {
@@ -126,8 +156,14 @@ export const startService = asyncHandler(async (req, res) => {
     req.auth!.userId,
     String(req.params.bookingId),
     'START_SERVICE',
+    { startOtp: req.body.startOtp },
   );
   sendSuccess(res, 'Service started successfully', booking);
+});
+
+export const confirmProviderBookingAction = asyncHandler(async (req, res) => {
+  const result = await confirmProviderBooking(req.auth!.userId, String(req.params.bookingId));
+  sendSuccess(res, 'Booking confirmed successfully', result);
 });
 
 export const completeService = asyncHandler(async (req, res) => {

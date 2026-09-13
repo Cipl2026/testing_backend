@@ -36,6 +36,9 @@ const envSchema = z.object({
   MIN_BOOKING_NOTICE_MINUTES: z.coerce.number().int().min(0).default(60),
   SLOT_RESERVATION_MINUTES: z.coerce.number().int().positive().default(10),
   PROVIDER_RESPONSE_TIMEOUT_MINUTES: z.coerce.number().int().positive().default(10),
+  PROVIDER_CONFIRM_REMINDER_24H_HOURS: z.coerce.number().positive().default(24),
+  PROVIDER_CONFIRM_REMINDER_2H_HOURS: z.coerce.number().positive().default(2),
+  PROVIDER_CONFIRM_DEADLINE_HOURS: z.coerce.number().positive().default(1),
   RAZORPAY_KEY_ID: z.string().optional(),
   RAZORPAY_KEY_SECRET: z.string().optional(),
   RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
@@ -170,6 +173,11 @@ function loadEnv() {
     },
     booking: {
       providerResponseTimeoutMinutes: data.PROVIDER_RESPONSE_TIMEOUT_MINUTES,
+      providerConfirmation: {
+        reminder24hHours: data.PROVIDER_CONFIRM_REMINDER_24H_HOURS,
+        reminder2hHours: data.PROVIDER_CONFIRM_REMINDER_2H_HOURS,
+        deadlineHours: data.PROVIDER_CONFIRM_DEADLINE_HOURS,
+      },
     },
     razorpay: {
       keyId: data.RAZORPAY_KEY_ID ?? '',

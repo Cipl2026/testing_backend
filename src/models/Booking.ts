@@ -9,6 +9,7 @@ import {
   TrackingState,
   type AssetSnapshot,
   BookingContextType,
+  type HomeHelpTaskPriority,
 } from '@ghaarfix/shared-types';
 
 export interface AddressSnapshot {
@@ -43,6 +44,20 @@ export interface ServiceZoneSnapshot {
   cityName: string;
 }
 
+export interface HomeHelpBookingSnapshot {
+  durationPackageId: Types.ObjectId;
+  durationLabel: string;
+  durationMinutes: number;
+  quotedAmount: number;
+  generalNotes?: string;
+  tasks: Array<{
+    serviceId: Types.ObjectId;
+    name: string;
+    priority: HomeHelpTaskPriority;
+    notes?: string;
+  }>;
+}
+
 export interface IBooking extends Document {
   bookingNumber: string;
   bookingType: BookingType;
@@ -69,6 +84,8 @@ export interface IBooking extends Document {
   status: BookingStatus;
   providerRequestStatus: ProviderRequestStatus;
   providerResponseExpiresAt?: Date;
+  providerRequestExpiredAt?: Date;
+  providerResponseWaitCount?: number;
   scheduledStart: Date;
   scheduledEnd: Date;
   timezone: string;
@@ -114,7 +131,21 @@ export interface IBooking extends Document {
     serviceCompletionOtp?: string;
     serviceCompletionOtpExpiresAt?: Date;
     serviceCompletionOtpIssuedAt?: Date;
+    serviceStartOtp?: string;
+    serviceStartOtpExpiresAt?: Date;
+    serviceStartOtpIssuedAt?: Date;
+    serviceStartOtpAttempts?: number;
   };
+  /** Set when the post-completion review reminder notification has been sent (once per booking). */
+  reviewReminderSentAt?: Date;
+  providerConfirmation?: {
+    status: 'PENDING' | 'CONFIRMED' | 'MISSED';
+    reminder24hSentAt?: Date;
+    reminder2hSentAt?: Date;
+    confirmedAt?: Date;
+    replacementProviderId?: Types.ObjectId;
+  };
+  homeHelp?: HomeHelpBookingSnapshot;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -202,6 +233,8 @@ const bookingSchema = new Schema<IBooking>(
       index: true,
     },
     providerResponseExpiresAt: { type: Date, index: true },
+    providerRequestExpiredAt: { type: Date, index: true, sparse: true },
+    providerResponseWaitCount: { type: Number, default: 0 },
     scheduledStart: { type: Date, required: true, index: true },
     scheduledEnd: { type: Date, required: true },
     timezone: { type: String, required: true },
@@ -254,6 +287,33 @@ const bookingSchema = new Schema<IBooking>(
       serviceCompletionOtp: { type: String, select: false },
       serviceCompletionOtpExpiresAt: Date,
       serviceCompletionOtpIssuedAt: Date,
+      serviceStartOtp: { type: String, select: false },
+      serviceStartOtpExpiresAt: Date,
+      serviceStartOtpIssuedAt: Date,
+      serviceStartOtpAttempts: { type: Number, default: 0 },
+    },
+    reviewReminderSentAt: { type: Date, sparse: true, index: true },
+    providerConfirmation: {
+      status: { type: String, enum: ['PENDING', 'CONFIRMED', 'MISSED'] },
+      reminder24hSentAt: Date,
+      reminder2hSentAt: Date,
+      confirmedAt: Date,
+      replacementProviderId: { type: Schema.Types.ObjectId, ref: 'User' },
+    },
+    homeHelp: {
+      durationPackageId: { type: Schema.Types.ObjectId, ref: 'HomeHelpDurationPackage' },
+      durationLabel: String,
+      durationMinutes: Number,
+      quotedAmount: Number,
+      generalNotes: String,
+      tasks: [
+        {
+          serviceId: { type: Schema.Types.ObjectId, ref: 'Service' },
+          name: String,
+          priority: { type: String, enum: ['HIGH', 'MEDIUM', 'LOW'] },
+          notes: String,
+        },
+      ],
     },
   },
   { timestamps: true },

@@ -1,5 +1,5 @@
 import mongoose, { type Document, Schema, Types } from 'mongoose';
-import { PricingType } from '@ghaarfix/shared-types';
+import { PricingType, ServiceProviderType, HomeHelpCompatibilityGroup } from '@ghaarfix/shared-types';
 
 export interface ServiceUrgentConfig {
   enabled: boolean;
@@ -40,6 +40,10 @@ export interface IService extends Document {
   keywords: string[];
   aliases: string[];
   searchText: string;
+  providerType: ServiceProviderType;
+  hourlyEligible: boolean;
+  instantEligible: boolean;
+  compatibilityGroup?: HomeHelpCompatibilityGroup;
   metadata?: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
@@ -93,6 +97,18 @@ const serviceSchema = new Schema<IService>(
     keywords: { type: [String], default: [] },
     aliases: { type: [String], default: [] },
     searchText: { type: String, default: '', index: 'text' },
+    providerType: {
+      type: String,
+      enum: Object.values(ServiceProviderType),
+      default: ServiceProviderType.SERVICE_PROFESSIONAL,
+      index: true,
+    },
+    hourlyEligible: { type: Boolean, default: false, index: true },
+    instantEligible: { type: Boolean, default: false },
+    compatibilityGroup: {
+      type: String,
+      enum: Object.values(HomeHelpCompatibilityGroup),
+    },
     metadata: { type: Schema.Types.Mixed },
   },
   { timestamps: true },

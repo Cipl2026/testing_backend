@@ -1,8 +1,12 @@
 import {
+  QueueName,
+  UserRole,
   UrgentDispatchTargetStatus,
   UrgentRequestStatus,
 } from '@ghaarfix/shared-types';
 import mongoose from 'mongoose';
+import { cancelQueuedJob, enqueueJob } from '@/infra/queue.service.js';
+import { isRedisEnabled } from '@/infra/redis.js';
 import { UrgentDispatchTarget } from '@/models/UrgentDispatchTarget.js';
 import { UrgentRequest } from '@/models/UrgentRequest.js';
 import { ProviderPresence } from '@/models/ProviderPresence.js';
@@ -13,7 +17,7 @@ import {
   countEligibleUrgentPool,
 } from '@/modules/urgent/urgent-matching.service.js';
 import { createNotification } from '@/modules/notifications/notification.service.js';
-import { getPushNotificationService } from '@/modules/push/push-notification.service.js';
+import { enqueuePushNotification } from '@/modules/notifications/notification-queue.processor.js';
 import { logger } from '@/utils/logger.js';
 import {
   emitUrgentExpired,
@@ -38,6 +42,8 @@ type DispatchSession = {
   radiusKm: number;
   /** Targets from the current batch; when all resolve, we advance. */
   pendingTargetIds: string[];
+  /** Used for durable BullMQ batch timeout job ids. */
+  batchNumber?: number;
   /** Guards against the batch timer and the last reject racing to re-ring. */
   advancing?: boolean;
 };
@@ -53,7 +59,11 @@ function getSession(requestId: string): DispatchSession {
   return session;
 }
 
-function clearSessionTimers(session: DispatchSession) {
+function batchTimeoutJobId(requestId: string, batchNumber: number) {
+  return `urgent-batch:${requestId}:${batchNumber}`;
+}
+
+function clearSessionTimers(session: DispatchSession, requestId?: string) {
   if (session.invitationTimer) {
     clearTimeout(session.invitationTimer);
     session.invitationTimer = undefined;
@@ -62,6 +72,38 @@ function clearSessionTimers(session: DispatchSession) {
     clearTimeout(session.expandTimer);
     session.expandTimer = undefined;
   }
+  if (requestId && session.batchNumber != null && isRedisEnabled()) {
+    void cancelQueuedJob(
+      QueueName.URGENT_MATCHING,
+      batchTimeoutJobId(requestId, session.batchNumber),
+    );
+  }
+}
+
+async function scheduleBatchTimeout(
+  requestId: string,
+  targetIds: string[],
+  delayMs: number,
+  batchNumber: number,
+) {
+  const session = getSession(requestId);
+  clearSessionTimers(session, requestId);
+  session.pendingTargetIds = targetIds;
+  session.batchNumber = batchNumber;
+
+  if (isRedisEnabled()) {
+    const jobId = await enqueueJob(
+      QueueName.URGENT_MATCHING,
+      'batch-timeout',
+      { requestId, targetIds },
+      { delayMs, jobId: batchTimeoutJobId(requestId, batchNumber) },
+    );
+    if (jobId) return;
+  }
+
+  session.invitationTimer = setTimeout(() => {
+    void handleBatchTimeout(requestId, targetIds);
+  }, delayMs);
 }
 
 /**
@@ -96,23 +138,38 @@ async function notifySingleTarget(
     // Road ETA is best-effort; fall back to aerial values on the serializer.
   }
 
-  const push = getPushNotificationService();
   const payload = serializeProviderUrgentTarget(request, target, serviceName);
   emitUrgentNewRequest(providerId, payload);
 
+  await createNotification({
+    userId: providerId,
+    userRole: UserRole.PROVIDER,
+    type: 'URGENT_REQUEST',
+    title: 'Emergency job nearby',
+    body: `Urgent ${serviceName} needed near you.`,
+    data: {
+      urgentRequestId: request._id.toString(),
+      route: `/urgent/${request._id.toString()}`,
+    },
+  });
+
   try {
-    await push.sendToProvider(providerId, {
-      title: '🚨 EMERGENCY JOB ALERT',
-      subtitle: serviceName,
-      body: `Urgent ${serviceName} needed near you. Tap to accept now.`,
-      data: {
-        type: 'URGENT_REQUEST',
-        urgentRequestId: request._id.toString(),
-        route: `/urgent/${request._id.toString()}`,
+    await enqueuePushNotification({
+      audience: 'provider',
+      targetId: providerId,
+      message: {
+        title: '🚨 EMERGENCY JOB ALERT',
+        subtitle: serviceName,
+        body: `Urgent ${serviceName} needed near you. Tap to accept now.`,
+        data: {
+          type: 'URGENT_REQUEST',
+          urgentRequestId: request._id.toString(),
+          route: `/urgent/${request._id.toString()}`,
+          tier: 'emergency',
+        },
+        collapseId: `urgent-${request._id.toString()}`,
         tier: 'emergency',
       },
-      collapseId: `urgent-${request._id.toString()}`,
-      tier: 'emergency',
     });
   } catch (error) {
     logger.warn('urgent push notification failed (non-fatal)', {
@@ -176,6 +233,13 @@ async function findNextProviders(
     customerId: request.customerId,
   };
 
+  const requiredServiceIds = request.homeHelp?.tasks?.length
+    ? [
+        request.serviceId.toString(),
+        ...request.homeHelp.tasks.map((task) => task.serviceId.toString()),
+      ].filter((value, index, all) => all.indexOf(value) === index)
+    : undefined;
+
   const onlineMatches = await matchUrgentProviders({
     serviceId: request.serviceId.toString(),
     coordinates: [lng, lat],
@@ -183,6 +247,7 @@ async function findNextProviders(
     maxBroadcastProviders: limit,
     addressForAreaCheck,
     excludeProviderIds,
+    requiredServiceIds,
   });
   // Offline/background providers receive offers via push notification only —
   // they don't receive live socket events. Combining both delivery channels
@@ -194,6 +259,7 @@ async function findNextProviders(
     maxBroadcastProviders: limit,
     addressForAreaCheck,
     excludeProviderIds,
+    requiredServiceIds,
   });
   return [...onlineMatches, ...offlineMatches].slice(0, limit);
 }
@@ -230,7 +296,7 @@ async function runRingNextProvider(requestId: string) {
   }
 
   const session = getSession(requestId);
-  clearSessionTimers(session);
+  clearSessionTimers(session, requestId);
   session.pendingTargetIds = [];
 
   const config = await getDispatchConfig();
@@ -307,10 +373,11 @@ async function runRingNextProvider(requestId: string) {
   );
 
   session.pendingTargetIds = targets.map((t) => t._id.toString());
+  const batchNumber = (request.searchConfig.broadcastCount ?? 0) + 1;
 
   const notifiedCount = excludeProviderIds.length + targets.length;
   request.searchConfig.notifiedCount = notifiedCount;
-  request.searchConfig.broadcastCount = notifiedCount;
+  request.searchConfig.broadcastCount = batchNumber;
   await request.save();
   emitProgress(request);
 
@@ -327,9 +394,18 @@ async function runRingNextProvider(requestId: string) {
     attempt: request.searchConfig.broadcastCount,
   });
 
-  session.invitationTimer = setTimeout(() => {
-    void handleBatchTimeout(requestId, session.pendingTargetIds);
-  }, ttlMs);
+  await scheduleBatchTimeout(requestId, session.pendingTargetIds, ttlMs, batchNumber);
+}
+
+/** BullMQ worker entrypoint for durable batch invitation expiry. */
+export async function processUrgentBatchTimeoutJob(data: Record<string, unknown>): Promise<void> {
+  const requestId = data.requestId as string | undefined;
+  const targetIds = data.targetIds as string[] | undefined;
+  if (!requestId || !Array.isArray(targetIds)) {
+    logger.warn('Invalid urgent batch timeout job payload', { data });
+    return;
+  }
+  await handleBatchTimeout(requestId, targetIds);
 }
 
 /**
@@ -396,7 +472,7 @@ async function advanceToNextBatch(requestId: string) {
       });
       if (stillPending > 0) return;
 
-      clearSessionTimers(session);
+      clearSessionTimers(session, requestId);
       session.pendingTargetIds = [];
       await runRingNextProvider(requestId);
     } finally {
@@ -457,7 +533,79 @@ export async function startUrgentSearchWaves(requestId: string) {
 export function stopUrgentSearchWaves(requestId: string) {
   const session = activeSessions.get(requestId);
   if (session) {
-    clearSessionTimers(session);
+    clearSessionTimers(session, requestId);
     activeSessions.delete(requestId);
   }
+}
+
+/**
+ * Re-hydrate in-flight urgent searches after process restart.
+ * Uses MongoDB state + BullMQ delayed jobs instead of lost in-memory timers.
+ */
+export async function recoverActiveUrgentDispatches(): Promise<{ recovered: number }> {
+  const searching = await UrgentRequest.find({
+    status: UrgentRequestStatus.SEARCHING,
+    expiresAt: { $gt: new Date() },
+  });
+
+  if (!searching.length) return { recovered: 0 };
+
+  const config = await getDispatchConfig();
+  let recovered = 0;
+
+  for (const request of searching) {
+    const requestId = request._id.toString();
+    if (activeSessions.has(requestId)) continue;
+
+    const radiusKm = request.searchConfig.currentRadiusKm ?? 1;
+    activeSessions.set(requestId, { radiusKm, pendingTargetIds: [] });
+
+    const openTargets = await UrgentDispatchTarget.find({
+      urgentRequestId: request._id,
+      status: {
+        $in: [
+          UrgentDispatchTargetStatus.PENDING,
+          UrgentDispatchTargetStatus.NOTIFIED,
+          UrgentDispatchTargetStatus.VIEWED,
+        ],
+      },
+    });
+
+    if (!openTargets.length) {
+      void advanceToNextBatch(requestId);
+      recovered += 1;
+      continue;
+    }
+
+    const session = getSession(requestId);
+    session.pendingTargetIds = openTargets.map((t) => t._id.toString());
+    session.batchNumber = request.searchConfig.broadcastCount ?? 1;
+
+    const notifiedTargets = openTargets.filter((t) => t.notifiedAt);
+    let delayMs = config.invitationTtlSeconds * 1000;
+    if (notifiedTargets.length > 0) {
+      const oldestNotified = notifiedTargets.reduce((oldest, current) =>
+        (current.notifiedAt!.getTime() < oldest.notifiedAt!.getTime() ? current : oldest),
+      );
+      const elapsedMs = Date.now() - oldestNotified.notifiedAt!.getTime();
+      delayMs = Math.max(0, config.invitationTtlSeconds * 1000 - elapsedMs);
+    }
+
+    if (delayMs <= 0) {
+      void handleBatchTimeout(requestId, session.pendingTargetIds);
+    } else {
+      await scheduleBatchTimeout(
+        requestId,
+        session.pendingTargetIds,
+        delayMs,
+        session.batchNumber,
+      );
+    }
+    recovered += 1;
+  }
+
+  if (recovered > 0) {
+    logger.info('Recovered active urgent dispatches after restart', { recovered });
+  }
+  return { recovered };
 }

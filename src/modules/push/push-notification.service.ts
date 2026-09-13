@@ -49,6 +49,32 @@ function resolvePushDelivery(message: PushMessage) {
   };
 }
 
+async function deactivateInvalidPushTokens(
+  tokens: string[],
+  failures: Array<{ status: string; message?: string; details?: unknown }>,
+): Promise<void> {
+  const invalidMessages = [
+    'DeviceNotRegistered',
+    'InvalidCredentials',
+    'MessageTooBig',
+    'MismatchSenderId',
+  ];
+
+  const invalidTokens = failures
+    .map((failure, index) => {
+      const message = failure.message ?? '';
+      const isInvalid = invalidMessages.some((pattern) => message.includes(pattern));
+      return isInvalid ? tokens[index] : null;
+    })
+    .filter((token): token is string => Boolean(token));
+
+  if (!invalidTokens.length) return;
+
+  const { PushToken } = await import('@/models/PushToken.js');
+  await PushToken.updateMany({ token: { $in: invalidTokens } }, { $set: { isActive: false } });
+  logger.info('Deactivated invalid push tokens', { count: invalidTokens.length });
+}
+
 async function sendExpoPush(tokens: string[], message: PushMessage): Promise<void> {
   if (!tokens.length) return;
 
@@ -99,6 +125,7 @@ async function sendExpoPush(tokens: string[], message: PushMessage): Promise<voi
       const failures = (result.data ?? []).filter((item) => item.status === 'error');
       if (failures.length) {
         logger.warn('Expo push delivery errors', { failures: failures.slice(0, 5) });
+        await deactivateInvalidPushTokens(tokens, failures);
       }
     } catch (error) {
       logger.error('Failed to send Expo push notification', { error });
