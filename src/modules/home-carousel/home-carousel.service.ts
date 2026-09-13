@@ -19,6 +19,11 @@ export type HomeCarouselItemView = {
   isActive: boolean;
   validFrom?: string;
   validTo?: string;
+  bannerStyle?: string;
+  badgeText?: string;
+  ctaText?: string;
+  gradientStart?: string;
+  gradientEnd?: string;
 };
 
 function serializeItem(item: IHomeCarouselItem): HomeCarouselItemView {
@@ -34,6 +39,11 @@ function serializeItem(item: IHomeCarouselItem): HomeCarouselItemView {
     isActive: item.isActive,
     validFrom: item.validFrom?.toISOString(),
     validTo: item.validTo?.toISOString(),
+    bannerStyle: item.bannerStyle,
+    badgeText: item.badgeText,
+    ctaText: item.ctaText,
+    gradientStart: item.gradientStart,
+    gradientEnd: item.gradientEnd,
   };
 }
 
@@ -92,6 +102,11 @@ export async function createHomeCarouselItem(input: {
   isActive?: boolean;
   validFrom?: string;
   validTo?: string;
+  bannerStyle?: string;
+  badgeText?: string;
+  ctaText?: string;
+  gradientStart?: string;
+  gradientEnd?: string;
 }) {
   const item = await HomeCarouselItem.create({
     placement: input.placement,
@@ -104,6 +119,11 @@ export async function createHomeCarouselItem(input: {
     isActive: input.isActive ?? true,
     validFrom: input.validFrom ? new Date(input.validFrom) : undefined,
     validTo: input.validTo ? new Date(input.validTo) : undefined,
+    bannerStyle: input.bannerStyle,
+    badgeText: input.badgeText,
+    ctaText: input.ctaText,
+    gradientStart: input.gradientStart,
+    gradientEnd: input.gradientEnd,
   });
   return serializeItem(item);
 }
@@ -121,6 +141,11 @@ export async function updateHomeCarouselItem(
     isActive: boolean;
     validFrom?: string;
     validTo?: string;
+    bannerStyle?: string;
+    badgeText?: string;
+    ctaText?: string;
+    gradientStart?: string;
+    gradientEnd?: string;
   }>,
 ) {
   const item = await HomeCarouselItem.findByIdAndUpdate(
@@ -138,6 +163,11 @@ export async function updateHomeCarouselItem(
         ? { validFrom: input.validFrom ? new Date(input.validFrom) : null }
         : {}),
       ...(input.validTo !== undefined ? { validTo: input.validTo ? new Date(input.validTo) : null } : {}),
+      ...(input.bannerStyle !== undefined ? { bannerStyle: input.bannerStyle } : {}),
+      ...(input.badgeText !== undefined ? { badgeText: input.badgeText } : {}),
+      ...(input.ctaText !== undefined ? { ctaText: input.ctaText } : {}),
+      ...(input.gradientStart !== undefined ? { gradientStart: input.gradientStart } : {}),
+      ...(input.gradientEnd !== undefined ? { gradientEnd: input.gradientEnd } : {}),
     },
     { new: true },
   );

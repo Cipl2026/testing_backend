@@ -1,5 +1,6 @@
-import { BookingStatus, PaymentStatus } from '@ghaarfix/shared-types';
+import { BookingStatus } from '@ghaarfix/shared-types';
 import { Booking } from '@/models/Booking.js';
+import { getProviderSettlementSummary } from '@/modules/settlements/provider-settlement.service.js';
 
 function startOfDay(date: Date): Date {
   const d = new Date(date);
@@ -41,29 +42,11 @@ export async function getProviderEarnings(providerId: string) {
   weekStart.setDate(weekStart.getDate() - 6);
   const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
 
-  const [today, week, month, pendingRows, recentBookings] = await Promise.all([
+  const [today, week, month, settlementSummary, recentBookings] = await Promise.all([
     aggregateEarnings(providerId, todayStart),
     aggregateEarnings(providerId, weekStart),
     aggregateEarnings(providerId, monthStart),
-    Booking.aggregate([
-      {
-        $match: {
-          providerId,
-          status: BookingStatus.COMPLETED,
-          'payment.status': { $ne: PaymentStatus.PAID },
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          amount: {
-            $sum: {
-              $ifNull: ['$price.providerPayoutAmount', '$price.finalAmount'],
-            },
-          },
-        },
-      },
-    ]),
+    getProviderSettlementSummary(providerId),
     Booking.find({ providerId, status: BookingStatus.COMPLETED })
       .sort({ updatedAt: -1 })
       .limit(12)
@@ -74,7 +57,11 @@ export async function getProviderEarnings(providerId: string) {
     today,
     week,
     month,
-    pendingPayout: Math.round(pendingRows[0]?.amount ?? 0),
+    pendingPayout: settlementSummary.pendingPayout,
+    pendingCommission: settlementSummary.pendingCommission,
+    customerPaymentPending: settlementSummary.customerPaymentPending,
+    settledPayout: settlementSummary.settledPayout,
+    settledCommission: settlementSummary.settledCommission,
     recentTransactions: recentBookings.map((booking) => ({
       id: booking._id.toString(),
       label: booking.serviceSnapshot?.name ?? booking.bookingNumber,

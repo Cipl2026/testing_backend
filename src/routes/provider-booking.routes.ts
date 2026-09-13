@@ -17,7 +17,9 @@ import {
   startServiceBodySchema,
 } from '@/validators/booking.js';
 import * as recurringController from '@/modules/home-help/home-help-recurring.controller.js';
+import * as providerSettlementController from '@/modules/settlements/provider-settlement.controller.js';
 import { paginationQuerySchema } from '@ghaarfix/validation';
+import { providerSettlementListQuerySchema } from '@/validators/settlement.js';
 
 const router = Router();
 
@@ -26,6 +28,19 @@ router.get(
   authenticate,
   authorize(UserRole.PROVIDER),
   providerFinanceController.listPayouts,
+);
+router.get(
+  '/settlements/summary',
+  authenticate,
+  authorize(UserRole.PROVIDER),
+  providerSettlementController.getMySettlementSummary,
+);
+router.get(
+  '/settlements',
+  authenticate,
+  authorize(UserRole.PROVIDER),
+  validateQuery(providerSettlementListQuerySchema),
+  providerSettlementController.listMySettlements,
 );
 router.get(
   '/payouts/:id',
@@ -123,6 +138,13 @@ router.post(
   validateParams(bookingIdParamSchema),
   validateBody(completeServiceBodySchema),
   bookingController.completeService,
+);
+router.post(
+  '/bookings/:bookingId/confirm-cash-received',
+  authenticate,
+  authorize(UserRole.PROVIDER),
+  validateParams(bookingIdParamSchema),
+  providerSettlementController.confirmCashReceived,
 );
 router.post(
   '/bookings/:bookingId/reschedule',

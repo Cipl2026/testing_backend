@@ -45,9 +45,17 @@ import {
   adminUpdateRecurringPlanBodySchema,
   recurringPlanIdParamSchema,
 } from '@/validators/home-help-recurring.js';
+import { platformBrandingBodySchema } from '@/validators/platform-branding.js';
+import {
+  adminSettlementListQuerySchema,
+  settleProviderRecordBodySchema,
+  settlementIdParamSchema,
+} from '@/validators/settlement.js';
 import * as urgentAdminController from '@/modules/urgent/urgent-admin.controller.js';
 import * as homeHelpAdminController from '@/modules/home-help/home-help-admin.controller.js';
 import * as recurringController from '@/modules/home-help/home-help-recurring.controller.js';
+import * as platformBrandingController from '@/modules/platform/platform-branding.controller.js';
+import * as adminSettlementController from '@/modules/settlements/admin-settlement.controller.js';
 import * as postServiceController from '@/modules/post-service/post-service.controller.js';
 import * as homeHealthController from '@/modules/home-health/home-health.controller.js';
 import {
@@ -437,6 +445,22 @@ router.get(
   authorize(UserRole.ADMIN),
   validateQuery(paginationQuerySchema),
   bookingController.adminListPayments,
+);
+
+router.get(
+  '/settlements',
+  authenticate,
+  authorize(UserRole.ADMIN),
+  validateQuery(adminSettlementListQuerySchema),
+  adminSettlementController.listSettlements,
+);
+router.post(
+  '/settlements/:settlementId/settle',
+  authenticate,
+  authorize(UserRole.ADMIN),
+  validateParams(settlementIdParamSchema),
+  validateBody(settleProviderRecordBodySchema),
+  adminSettlementController.settleRecord,
 );
 
 router.get(
@@ -2071,6 +2095,20 @@ router.patch(
   validateParams(recurringPlanIdParamSchema),
   validateBody(adminUpdateRecurringPlanBodySchema),
   recurringController.adminUpdatePlan,
+);
+
+router.get(
+  '/platform/branding',
+  authenticate,
+  authorize(UserRole.ADMIN),
+  platformBrandingController.getAdminBranding,
+);
+router.patch(
+  '/platform/branding',
+  authenticate,
+  authorize(UserRole.ADMIN),
+  validateBody(platformBrandingBodySchema),
+  platformBrandingController.updateAdminBranding,
 );
 
 export default router;

@@ -44,9 +44,11 @@ import paymentRoutes from '@/routes/payment.routes.js';
 import providerRoutes from '@/routes/provider.routes.js';
 import appVersionRoutes from '@/routes/app-version.routes.js';
 import homeHelpRoutes from '@/routes/home-help.routes.js';
+import platformRoutes from '@/routes/platform.routes.js';
 
 const router = Router();
 
+router.use('/platform', platformRoutes);
 router.use('/app', appVersionRoutes);
 router.use('/home-help', homeHelpRoutes);
 router.use('/health', healthRoutes);

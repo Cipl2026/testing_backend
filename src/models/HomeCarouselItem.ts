@@ -15,6 +15,11 @@ export enum HomeCarouselActionType {
   URL = 'URL',
 }
 
+export enum HomeCarouselBannerStyle {
+  GRADIENT = 'GRADIENT',
+  FULL_IMAGE = 'FULL_IMAGE',
+}
+
 export interface IHomeCarouselItem extends Document {
   placement: HomeCarouselPlacement;
   title: string;
@@ -26,6 +31,12 @@ export interface IHomeCarouselItem extends Document {
   isActive: boolean;
   validFrom?: Date;
   validTo?: Date;
+  /** Banner-only: gradient card vs full-bleed image */
+  bannerStyle?: HomeCarouselBannerStyle;
+  badgeText?: string;
+  ctaText?: string;
+  gradientStart?: string;
+  gradientEnd?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -51,6 +62,11 @@ const homeCarouselItemSchema = new Schema<IHomeCarouselItem>(
     isActive: { type: Boolean, default: true, index: true },
     validFrom: Date,
     validTo: Date,
+    bannerStyle: { type: String, enum: Object.values(HomeCarouselBannerStyle) },
+    badgeText: { type: String, trim: true, maxlength: 40 },
+    ctaText: { type: String, trim: true, maxlength: 40 },
+    gradientStart: { type: String, trim: true, maxlength: 20 },
+    gradientEnd: { type: String, trim: true, maxlength: 20 },
   },
   { timestamps: true },
 );

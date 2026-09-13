@@ -8,7 +8,7 @@ import { asyncHandler } from '@/utils/asyncHandler.js';
 import { sendSuccess } from '@/utils/apiResponse.js';
 import { ErrorCode } from '@ghaarfix/shared-types';
 
-const ALLOWED_FOLDERS = new Set(['catalog', 'categories', 'subcategories', 'services', 'home-carousel']);
+const ALLOWED_FOLDERS = new Set(['catalog', 'categories', 'subcategories', 'services', 'home-carousel', 'branding']);
 
 export const uploadCatalogImage = asyncHandler(async (req, res) => {
   if (!req.file) {

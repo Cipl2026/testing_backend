@@ -23,8 +23,10 @@ export async function getProviderFinanceEarnings(providerId: string) {
       grossEarningsMinor: legacy.month.amount * 100,
       platformDeductionsMinor: 0,
       payoutPendingMinor: legacy.pendingPayout * 100,
-      payoutCompletedMinor: 0,
+      payoutCompletedMinor: legacy.settledPayout * 100,
       adjustmentsMinor: 0,
+      pendingCommission: legacy.pendingCommission,
+      customerPaymentPending: legacy.customerPaymentPending,
       breakdown: legacy.recentTransactions,
     };
   }
@@ -56,7 +58,10 @@ export async function getProviderFinanceEarnings(providerId: string) {
     .filter((e) => e.eventType === FinancialEventType.ADJUSTMENT)
     .reduce((s, e) => s + (e.direction === FinancialDirection.OUTFLOW ? e.amountMinor : -e.amountMinor), 0);
 
-  const payoutPendingMinor = Math.max(0, grossEarningsMinor - payoutCompletedMinor - adjustmentsMinor);
+  const payoutPendingMinor = Math.max(
+    0,
+    legacy.pendingPayout * 100 || grossEarningsMinor - payoutCompletedMinor - adjustmentsMinor,
+  );
 
   await ProviderEarningsSnapshot.findOneAndUpdate(
     { providerId, periodStart: start },
@@ -91,6 +96,11 @@ export async function getProviderFinanceEarnings(providerId: string) {
     today: legacy.today,
     week: legacy.week,
     month: legacy.month,
+    pendingPayout: legacy.pendingPayout,
+    pendingCommission: legacy.pendingCommission,
+    customerPaymentPending: legacy.customerPaymentPending,
+    settledPayout: legacy.settledPayout,
+    settledCommission: legacy.settledCommission,
     recentTransactions: legacy.recentTransactions.map((t) => ({
       ...t,
       amountMinor: t.amount * 100,

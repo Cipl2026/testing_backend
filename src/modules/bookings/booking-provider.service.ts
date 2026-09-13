@@ -420,6 +420,11 @@ export async function updateBookingStatusAction(
         );
       }
     });
+    if (booking.payment.status === PaymentStatus.PAID) {
+      void import('@/modules/settlements/provider-settlement.hooks.js').then((m) =>
+        m.onBookingCompletedAndPaid(bookingId),
+      );
+    }
   }
 
   await notifyBookingEvent(

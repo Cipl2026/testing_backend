@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { objectIdSchema } from '@ghaarfix/validation';
-import { HomeCarouselActionType, HomeCarouselPlacement } from '@/models/HomeCarouselItem.js';
+import { HomeCarouselActionType, HomeCarouselBannerStyle, HomeCarouselPlacement } from '@/models/HomeCarouselItem.js';
 
 const imageUrlSchema = z
   .string()
@@ -27,6 +27,11 @@ export const homeCarouselBodySchema = z.object({
   isActive: z.boolean().optional(),
   validFrom: z.string().datetime().optional(),
   validTo: z.string().datetime().optional(),
+  bannerStyle: z.nativeEnum(HomeCarouselBannerStyle).optional(),
+  badgeText: z.string().trim().max(40).optional(),
+  ctaText: z.string().trim().max(40).optional(),
+  gradientStart: z.string().trim().max(20).optional(),
+  gradientEnd: z.string().trim().max(20).optional(),
 });
 
 export const homeCarouselUpdateBodySchema = homeCarouselBodySchema.partial();
