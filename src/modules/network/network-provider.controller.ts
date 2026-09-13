@@ -4,6 +4,7 @@ import { asyncHandler } from '@/utils/asyncHandler.js';
 import { sendSuccess } from '@/utils/apiResponse.js';
 
 export const getOpportunities = asyncHandler(async (req, res) => {
+  await opportunityService.suggestCoverageOpportunities(req.auth!.userId);
   const data = await opportunityService.listProviderOpportunities(req.auth!.userId);
   sendSuccess(res, 'Network opportunities', data);
 });

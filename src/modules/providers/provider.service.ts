@@ -54,7 +54,9 @@ export async function updateProviderProfile(userId: string, input: ProviderProfi
   );
 
   profile.isProfileComplete = isComplete;
-  profile.providerStatus = ProviderStatus.PENDING;
+  if (profile.providerStatus !== ProviderStatus.ACTIVE) {
+    profile.providerStatus = isComplete ? ProviderStatus.PENDING : profile.providerStatus;
+  }
   await profile.save();
 
   if (isComplete) {

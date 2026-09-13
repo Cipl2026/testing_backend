@@ -9,6 +9,8 @@ export type PlatformBrandingPayload = {
   providerLogoDarkUrl?: string;
   customerAppName?: string;
   providerAppName?: string;
+  customerApiUrl?: string;
+  providerApiUrl?: string;
 };
 
 function serialize(doc: InstanceType<typeof PlatformBranding> | null) {
@@ -19,6 +21,8 @@ function serialize(doc: InstanceType<typeof PlatformBranding> | null) {
     providerLogoDarkUrl: doc?.providerLogoDarkUrl ?? null,
     customerAppName: doc?.customerAppName ?? 'Ghaarfix',
     providerAppName: doc?.providerAppName ?? 'Ghaarfix Pro',
+    customerApiUrl: doc?.customerApiUrl ?? null,
+    providerApiUrl: doc?.providerApiUrl ?? null,
     updatedAt: doc?.updatedAt?.toISOString() ?? null,
   };
 }
@@ -44,6 +48,12 @@ export async function updatePlatformBranding(input: PlatformBrandingPayload) {
         ...(input.customerAppName !== undefined ? { customerAppName: input.customerAppName.trim() || 'Ghaarfix' } : {}),
         ...(input.providerAppName !== undefined
           ? { providerAppName: input.providerAppName.trim() || 'Ghaarfix Pro' }
+          : {}),
+        ...(input.customerApiUrl !== undefined
+          ? { customerApiUrl: input.customerApiUrl.trim() || undefined }
+          : {}),
+        ...(input.providerApiUrl !== undefined
+          ? { providerApiUrl: input.providerApiUrl.trim() || undefined }
           : {}),
       },
     },

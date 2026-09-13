@@ -1,4 +1,4 @@
-import { ProviderPresenceStatus, ProviderStatus, ProviderServiceApprovalStatus, ErrorCode } from '@ghaarfix/shared-types';
+import { ProviderPresenceStatus, ErrorCode } from '@ghaarfix/shared-types';
 import { env } from '@/config/env.js';
 import { ProviderPresence } from '@/models/ProviderPresence.js';
 import { ProviderProfile } from '@/models/ProviderProfile.js';
@@ -47,28 +47,17 @@ async function assertProviderCanGoOnline(providerId: string): Promise<void> {
   if (!profile) {
     throw new AppError('Complete your provider profile before going online.', 403, ErrorCode.FORBIDDEN);
   }
-  if (profile.providerStatus !== ProviderStatus.ACTIVE) {
-    throw new AppError(
-      'Your account must be approved by admin before you can go online.',
-      403,
-      ErrorCode.FORBIDDEN,
-    );
-  }
   if (!profile.isProfileComplete) {
     throw new AppError('Complete your profile setup before going online.', 403, ErrorCode.FORBIDDEN);
   }
-  if (!profile.isVerified) {
-    throw new AppError('Identity verification must be approved before going online.', 403, ErrorCode.FORBIDDEN);
-  }
 
-  const approvedServices = await ProviderService.countDocuments({
+  const activeServices = await ProviderService.countDocuments({
     providerId,
-    approvalStatus: ProviderServiceApprovalStatus.APPROVED,
     isActive: true,
   });
-  if (approvedServices < 1) {
+  if (activeServices < 1) {
     throw new AppError(
-      'At least one service must be approved by admin before going online.',
+      'Add at least one service before going online.',
       403,
       ErrorCode.FORBIDDEN,
     );

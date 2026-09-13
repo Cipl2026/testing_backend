@@ -8,6 +8,8 @@ export interface IPlatformBranding extends Document {
   providerLogoDarkUrl?: string;
   customerAppName: string;
   providerAppName: string;
+  customerApiUrl?: string;
+  providerApiUrl?: string;
   updatedAt: Date;
   createdAt: Date;
 }
@@ -21,6 +23,8 @@ const platformBrandingSchema = new Schema<IPlatformBranding>(
     providerLogoDarkUrl: { type: String },
     customerAppName: { type: String, default: 'Ghaarfix' },
     providerAppName: { type: String, default: 'Ghaarfix Pro' },
+    customerApiUrl: { type: String },
+    providerApiUrl: { type: String },
   },
   { timestamps: true },
 );
