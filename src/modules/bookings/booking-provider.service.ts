@@ -9,6 +9,7 @@ import {
   TimelineEventType,
   TrackingState,
   UserRole,
+  type RealtimeBookingAction,
 } from '@ghaarfix/shared-types';
 import { Booking } from '@/models/Booking.js';
 import { PriceChangeRequest } from '@/models/PriceChangeRequest.js';
@@ -23,7 +24,7 @@ import {
   notifyBookingParticipants,
 } from '@/modules/booking-participants/booking-participant.service.js';
 import { notifyBookingEvent } from '@/modules/notifications/notification.service.js';
-import { emitBookingStatusChanged, emitToProvider } from '@/modules/realtime/socket.service.js';
+import { broadcastBookingRealtimeUpdate } from '@/modules/realtime/booking-realtime.service.js';
 import {
   clearServiceCompletionOtp,
   emitServiceCompletionOtp,
@@ -36,7 +37,6 @@ import {
   issueServiceStartOtp,
   verifyServiceStartOtp,
 } from '@/modules/bookings/service-start-otp.service.js';
-import { initProviderConfirmationOnBooking } from '@/modules/bookings/provider-confirmation.service.js';
 import { stopTrackingOnArrival } from '@/modules/tracking/location-tracking.service.js';
 import { recalculateTrustMetrics } from '@/modules/trust/trust-metrics.service.js';
 import { getOrCreateChecklistForService } from '@/modules/trust-protection/quality-checklist.service.js';
@@ -163,15 +163,49 @@ async function getOwnedBooking(
 }
 
 export async function acceptBooking(providerId: string, bookingId: string) {
-  const booking = await getOwnedBooking(providerId, bookingId);
-  if (booking.providerRequestStatus !== ProviderRequestStatus.PENDING) {
+  const existing = await Booking.findOne({ _id: bookingId, providerId });
+  if (!existing) throw new AppError('Booking not found.', 404, ErrorCode.NOT_FOUND);
+
+  if (existing.providerRequestStatus === ProviderRequestStatus.ACCEPTED) {
+    return serializeBookingSummary(existing, 'provider');
+  }
+  if (existing.providerRequestStatus !== ProviderRequestStatus.PENDING) {
     throw new AppError('This booking request has already been processed.', 409, ErrorCode.CONFLICT);
   }
 
-  booking.status = transitionBookingStatus(booking.status, 'PROVIDER_ACCEPT', UserRole.PROVIDER);
-  booking.providerRequestStatus = ProviderRequestStatus.ACCEPTED;
-  initProviderConfirmationOnBooking(booking);
-  await booking.save();
+  const nextStatus = transitionBookingStatus(existing.status, 'PROVIDER_ACCEPT', UserRole.PROVIDER);
+  const confirmationPatch =
+    existing.bookingType === BookingType.SCHEDULED &&
+    (nextStatus === BookingStatus.CONFIRMED || nextStatus === BookingStatus.PENDING_PROVIDER)
+      ? { providerConfirmation: { status: 'PENDING' as const } }
+      : {};
+
+  const claimed = await Booking.findOneAndUpdate(
+    {
+      _id: bookingId,
+      providerId,
+      providerRequestStatus: ProviderRequestStatus.PENDING,
+      status: existing.status,
+    },
+    {
+      $set: {
+        status: nextStatus,
+        providerRequestStatus: ProviderRequestStatus.ACCEPTED,
+        ...confirmationPatch,
+      },
+    },
+    { new: true },
+  );
+
+  if (!claimed) {
+    const current = await Booking.findOne({ _id: bookingId, providerId });
+    if (current?.providerRequestStatus === ProviderRequestStatus.ACCEPTED) {
+      return serializeBookingSummary(current, 'provider');
+    }
+    throw new AppError('This booking request has already been processed.', 409, ErrorCode.CONFLICT);
+  }
+
+  const booking = claimed;
 
   await consumeEntitlementForBooking(booking);
 
@@ -199,14 +233,19 @@ export async function acceptBooking(providerId: string, bookingId: string) {
     bookingId,
   );
 
-  emitBookingStatusChanged(booking.customerId.toString(), {
-    bookingId,
-    status: booking.status,
-  });
-  emitToProvider(providerId, 'booking:status-changed', {
-    bookingId,
-    status: booking.status,
-  });
+  broadcastBookingRealtimeUpdate(
+    {
+      bookingId,
+      status: booking.status,
+      action: 'ACCEPTED',
+      providerId,
+      customerId: booking.customerId.toString(),
+    },
+    {
+      customerId: booking.customerId.toString(),
+      providerId,
+    },
+  );
 
   return serializeBookingSummary(booking, 'provider');
 }
@@ -217,20 +256,40 @@ export async function rejectBooking(
   reason: string,
   category?: string,
 ) {
-  const booking = await getOwnedBooking(providerId, bookingId);
-  if (booking.providerRequestStatus !== ProviderRequestStatus.PENDING) {
+  const existing = await getOwnedBooking(providerId, bookingId);
+  if (existing.providerRequestStatus !== ProviderRequestStatus.PENDING) {
     throw new AppError('This booking request has already been processed.', 409, ErrorCode.CONFLICT);
   }
 
-  booking.status = transitionBookingStatus(booking.status, 'PROVIDER_REJECT', UserRole.PROVIDER);
-  booking.providerRequestStatus = ProviderRequestStatus.REJECTED;
-  booking.cancellation = {
-    reason,
-    actorId: booking.providerId,
-    actorRole: UserRole.PROVIDER,
-    cancelledAt: new Date(),
-  };
-  await booking.save();
+  const nextStatus = transitionBookingStatus(existing.status, 'PROVIDER_REJECT', UserRole.PROVIDER);
+
+  const claimed = await Booking.findOneAndUpdate(
+    {
+      _id: bookingId,
+      providerId,
+      providerRequestStatus: ProviderRequestStatus.PENDING,
+      status: existing.status,
+    },
+    {
+      $set: {
+        status: nextStatus,
+        providerRequestStatus: ProviderRequestStatus.REJECTED,
+        cancellation: {
+          reason,
+          actorId: existing.providerId,
+          actorRole: UserRole.PROVIDER,
+          cancelledAt: new Date(),
+        },
+      },
+    },
+    { new: true },
+  );
+
+  if (!claimed) {
+    throw new AppError('This booking request has already been processed.', 409, ErrorCode.CONFLICT);
+  }
+
+  const booking = claimed;
 
   await releaseEntitlementForBooking(booking);
 
@@ -248,6 +307,20 @@ export async function rejectBooking(
     'Booking declined',
     reason.trim() || 'Your booking request was declined by the professional.',
     bookingId,
+  );
+
+  broadcastBookingRealtimeUpdate(
+    {
+      bookingId,
+      status: booking.status,
+      action: 'REJECTED',
+      providerId,
+      customerId: booking.customerId.toString(),
+    },
+    {
+      customerId: booking.customerId.toString(),
+      providerId,
+    },
   );
 
   return serializeBookingSummary(booking, 'provider');
@@ -482,16 +555,19 @@ export async function updateBookingStatusAction(
     );
   }
 
-  emitBookingStatusChanged(booking.customerId.toString(), {
-    bookingId,
-    status: booking.status,
-    action,
-  });
-  emitToProvider(providerId, 'booking:status-changed', {
-    bookingId,
-    status: booking.status,
-    action,
-  });
+  broadcastBookingRealtimeUpdate(
+    {
+      bookingId,
+      status: booking.status,
+      action: action as RealtimeBookingAction,
+      providerId,
+      customerId: booking.customerId.toString(),
+    },
+    {
+      customerId: booking.customerId.toString(),
+      providerId,
+    },
+  );
 
   return serializeBookingSummary(booking, 'provider');
 }
@@ -737,14 +813,19 @@ export async function cancelProviderBooking(
     metadata: { reason },
   });
 
-  emitBookingStatusChanged(booking.customerId.toString(), {
-    bookingId,
-    status: booking.status,
-  });
-  emitToProvider(providerId, 'booking:status-changed', {
-    bookingId,
-    status: booking.status,
-  });
+  broadcastBookingRealtimeUpdate(
+    {
+      bookingId,
+      status: booking.status,
+      action: 'CANCELLED',
+      providerId,
+      customerId: booking.customerId.toString(),
+    },
+    {
+      customerId: booking.customerId.toString(),
+      providerId,
+    },
+  );
 
   await notifyBookingEvent(
     booking.customerId.toString(),

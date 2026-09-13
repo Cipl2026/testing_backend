@@ -78,6 +78,11 @@ export const registerVerifySchema = z.object({
   role: mobileRoleSchema,
 });
 
+export const registerResendSchema = z.object({
+  phone: z.string().min(10, 'Phone number is required'),
+  role: mobileRoleSchema,
+});
+
 export const mpinLoginSchema = z.object({
   phone: z.string().min(10, 'Phone number is required'),
   mpin: mpinSchema,
@@ -104,6 +109,7 @@ export type ProviderProfileInput = z.infer<typeof providerProfileSchema>;
 export type AdminLoginInput = z.infer<typeof adminLoginSchema>;
 export type RegisterRequestInput = z.infer<typeof registerRequestSchema>;
 export type RegisterVerifyInput = z.infer<typeof registerVerifySchema>;
+export type RegisterResendInput = z.infer<typeof registerResendSchema>;
 export type MpinLoginInput = z.infer<typeof mpinLoginSchema>;
 export type ResetMpinRequestInput = z.infer<typeof resetMpinRequestSchema>;
 export type ResetMpinConfirmInput = z.infer<typeof resetMpinConfirmSchema>;

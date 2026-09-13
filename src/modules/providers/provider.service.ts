@@ -64,6 +64,9 @@ export async function updateProviderProfile(userId: string, input: ProviderProfi
       { providerId: user._id, approvalStatus: ProviderServiceApprovalStatus.PENDING },
       { approvalStatus: ProviderServiceApprovalStatus.APPROVED, rejectionReason: undefined },
     );
+  }
+
+  if (isComplete || input.acceptsUrgentJobs !== undefined) {
     await syncProviderServiceUrgentFlags(user._id.toString());
   }
 

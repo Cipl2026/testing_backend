@@ -20,9 +20,9 @@ const envSchema = z.object({
   CLIENT_URL: z.string().min(1, 'CLIENT_URL is required'),
   ADMIN_URL: z.string().min(1, 'ADMIN_URL is required'),
   OTP_LENGTH: z.coerce.number().int().min(4).max(8).default(6),
-  OTP_EXPIRY_MINUTES: z.coerce.number().int().positive().default(5),
+  OTP_EXPIRY_MINUTES: z.coerce.number().int().positive().default(10),
   OTP_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
-  OTP_RESEND_COOLDOWN_SECONDS: z.coerce.number().int().positive().default(60),
+  OTP_RESEND_COOLDOWN_SECONDS: z.coerce.number().int().positive().default(300),
   EXPOSE_OTP_IN_RESPONSE: z
     .enum(['true', 'false'])
     .optional()

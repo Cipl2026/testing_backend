@@ -153,7 +153,10 @@ export const providerServiceBodySchema = z.object({
 
 export const providerServiceUpdateSchema = providerServiceBodySchema
   .partial()
-  .extend({ isActive: z.boolean().optional() });
+  .extend({
+    isActive: z.boolean().optional(),
+    isUrgentEnabled: z.boolean().optional(),
+  });
 
 export const rejectProviderServiceSchema = z.object({
   reason: z.string().trim().min(3).max(500),

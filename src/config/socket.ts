@@ -45,10 +45,14 @@ export function attachSocketServer(httpServer: HttpServer): SocketIOServer {
 
     if (role === UserRole.CUSTOMER) {
       socket.join(`customer:${userId}`);
+      socket.join(`user:${userId}`);
     } else if (role === UserRole.PROVIDER) {
       socket.join(`provider:${userId}`);
+      socket.join(`user:${userId}`);
+      socket.join('providers');
     } else if (role === UserRole.ADMIN) {
       socket.join('admin');
+      socket.join(`user:${userId}`);
     }
 
     socket.on('disconnect', (reason) => {

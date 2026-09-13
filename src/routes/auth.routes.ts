@@ -8,6 +8,7 @@ import {
   mpinLoginSchema,
   refreshTokenSchema,
   registerRequestSchema,
+  registerResendSchema,
   registerVerifySchema,
   resetMpinConfirmSchema,
   resetMpinRequestSchema,
@@ -43,6 +44,13 @@ router.post(
   otpLimiter,
   validateBody(registerVerifySchema),
   authController.registerVerifyOtp,
+);
+
+router.post(
+  '/register/resend',
+  otpLimiter,
+  validateBody(registerResendSchema),
+  authController.registerResendOtp,
 );
 
 router.post(

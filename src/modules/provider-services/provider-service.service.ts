@@ -10,10 +10,14 @@ import { buildPaginationMeta } from '@/utils/catalog.js';
 import { serializeProviderService } from '@/utils/catalogSerializers.js';
 import type { AdminListQuery } from '@/validators/catalog.js';
 
-function resolveUrgentFlags(service: IService, profile: IProviderProfile | null) {
+function resolveSupportsUrgent(service: IService, profile: IProviderProfile | null) {
   const acceptsUrgent = profile?.acceptsUrgentJobs !== false;
-  const enabled = Boolean(service.isUrgentAvailable) && acceptsUrgent;
-  return { supportsUrgent: enabled, isUrgentEnabled: enabled };
+  return Boolean(service.isUrgentAvailable) && acceptsUrgent;
+}
+
+function resolveUrgentFlags(service: IService, profile: IProviderProfile | null) {
+  const supportsUrgent = resolveSupportsUrgent(service, profile);
+  return { supportsUrgent, isUrgentEnabled: supportsUrgent };
 }
 
 export async function syncProviderServiceUrgentFlags(providerId: string) {
@@ -30,15 +34,18 @@ export async function syncProviderServiceUrgentFlags(providerId: string) {
   for (const record of records) {
     const service = serviceMap.get(record.serviceId.toString());
     if (!service) continue;
-    const flags = resolveUrgentFlags(service, profile);
-    if (
-      record.supportsUrgent === flags.supportsUrgent &&
-      record.isUrgentEnabled === flags.isUrgentEnabled
-    ) {
+    const supportsUrgent = resolveSupportsUrgent(service, profile);
+    let nextUrgentEnabled = record.isUrgentEnabled;
+    if (!supportsUrgent) {
+      nextUrgentEnabled = false;
+    } else if (!record.supportsUrgent) {
+      nextUrgentEnabled = true;
+    }
+    if (record.supportsUrgent === supportsUrgent && record.isUrgentEnabled === nextUrgentEnabled) {
       continue;
     }
-    record.supportsUrgent = flags.supportsUrgent;
-    record.isUrgentEnabled = flags.isUrgentEnabled;
+    record.supportsUrgent = supportsUrgent;
+    record.isUrgentEnabled = nextUrgentEnabled;
     await record.save();
     updated += 1;
   }
@@ -130,16 +137,36 @@ export async function updateProviderService(
       notes?: string;
     };
     isActive: boolean;
+    isUrgentEnabled: boolean;
   }>,
 ) {
   const record = await ProviderService.findOne({ _id: id, providerId });
   if (!record) throw new AppError('Provider service not found.', 404, ErrorCode.NOT_FOUND);
+  const service = await Service.findById(record.serviceId);
+  const profile = await ProviderProfile.findOne({ userId: providerId });
+
   if (input.experienceYears !== undefined) record.experienceYears = input.experienceYears;
   if (input.description !== undefined) record.description = input.description;
   if (input.customPricing) record.customPricing = input.customPricing;
   if (input.isActive !== undefined) record.isActive = input.isActive;
+
+  if (input.isUrgentEnabled !== undefined) {
+    if (!service) {
+      throw new AppError('Service is not available.', 404, ErrorCode.NOT_FOUND);
+    }
+    const supportsUrgent = resolveSupportsUrgent(service, profile);
+    record.supportsUrgent = supportsUrgent;
+    if (input.isUrgentEnabled && !supportsUrgent) {
+      throw new AppError(
+        'Urgent jobs are not available for this service.',
+        400,
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
+    record.isUrgentEnabled = Boolean(input.isUrgentEnabled) && supportsUrgent;
+  }
+
   await record.save();
-  const service = await Service.findById(record.serviceId);
   return serializeProviderService(record, { service: service ?? undefined });
 }
 

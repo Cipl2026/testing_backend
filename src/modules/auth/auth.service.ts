@@ -26,6 +26,7 @@ import { isSecurityComplianceEnabled } from '@/modules/security/security-feature
 import type {
   MpinLoginInput,
   RegisterRequestInput,
+  RegisterResendInput,
   RegisterVerifyInput,
   RequestOtpInput,
   ResetMpinConfirmInput,
@@ -306,6 +307,80 @@ export async function registerRequestOtp(
   return otpResult;
 }
 
+export async function registerResendOtp(
+  input: RegisterResendInput,
+): Promise<{ requestId: string; otp?: string }> {
+  const phone = normalizePhone(input.phone);
+  const role = input.role as UserRole.CUSTOMER | UserRole.PROVIDER;
+
+  const existing = await User.findOne({ phone, role });
+  if (existing) {
+    throw new AppError(
+      'An account already exists with this number. Please log in.',
+      409,
+      ErrorCode.CONFLICT,
+    );
+  }
+
+  const intent = await RegistrationIntent.findOne({ phone, role }).sort({ createdAt: -1 });
+  if (!intent) {
+    throw new AppError('Registration session expired. Please start again.', 400, ErrorCode.VALIDATION_ERROR);
+  }
+
+  if (intent.expiresAt.getTime() < Date.now()) {
+    await RegistrationIntent.deleteOne({ _id: intent._id });
+    throw new AppError('Registration session expired. Please start again.', 400, ErrorCode.VALIDATION_ERROR);
+  }
+
+  const recentOtp = await Otp.findOne({
+    phone,
+    role,
+    isVerified: false,
+    lastSentAt: { $gte: new Date(Date.now() - env.otp.resendCooldownSeconds * 1000) },
+  }).sort({ createdAt: -1 });
+
+  if (recentOtp) {
+    throw new AppError(
+      `Please wait ${env.otp.resendCooldownSeconds} seconds before requesting another OTP.`,
+      429,
+      ErrorCode.TOO_MANY_REQUESTS,
+    );
+  }
+
+  const otp = generateOtp(env.otp.length);
+  const requestId = generateRequestId();
+  const expiresAt = new Date(Date.now() + env.otp.expiryMinutes * 60 * 1000);
+
+  await Otp.updateMany({ phone, role, isVerified: false }, { isVerified: true });
+
+  await Otp.create({
+    requestId,
+    phone,
+    role,
+    otpHash: hashOtp(otp),
+    expiresAt,
+    attempts: 0,
+    isVerified: false,
+    lastSentAt: new Date(),
+  });
+
+  intent.requestId = requestId;
+  await intent.save();
+
+  const provider = getOtpProvider();
+  const delivery = await provider.sendOtp(phone, otp);
+  if (!delivery.success) {
+    throw new AppError('Failed to send OTP. Please try again later.', 500, ErrorCode.INTERNAL_ERROR);
+  }
+
+  const response: { requestId: string; otp?: string } = { requestId };
+  if (env.otp.exposeInResponse) {
+    response.otp = otp;
+  }
+
+  return response;
+}
+
 export async function registerVerifyOtp(input: RegisterVerifyInput) {
   const phone = normalizePhone(input.phone);
   const role = input.role as UserRole.CUSTOMER | UserRole.PROVIDER;
@@ -319,21 +394,7 @@ export async function registerVerifyOtp(input: RegisterVerifyInput) {
     );
   }
 
-  const otpRecord = await Otp.findOne({
-    phone,
-    role,
-    isVerified: false,
-  }).sort({ createdAt: -1 });
-
-  if (!otpRecord) {
-    throw new AppError('OTP expired or not found. Please request a new OTP.', 400, ErrorCode.VALIDATION_ERROR);
-  }
-
-  const intent = await RegistrationIntent.findOne({
-    requestId: otpRecord.requestId,
-    phone,
-    role,
-  });
+  const intent = await RegistrationIntent.findOne({ phone, role }).sort({ createdAt: -1 });
 
   if (!intent) {
     throw new AppError('Registration session expired. Please start again.', 400, ErrorCode.VALIDATION_ERROR);
@@ -342,6 +403,17 @@ export async function registerVerifyOtp(input: RegisterVerifyInput) {
   if (intent.expiresAt.getTime() < Date.now()) {
     await RegistrationIntent.deleteOne({ _id: intent._id });
     throw new AppError('Registration session expired. Please start again.', 400, ErrorCode.VALIDATION_ERROR);
+  }
+
+  const otpRecord = await Otp.findOne({
+    requestId: intent.requestId,
+    phone,
+    role,
+    isVerified: false,
+  });
+
+  if (!otpRecord) {
+    throw new AppError('OTP expired or not found. Please request a new OTP.', 400, ErrorCode.VALIDATION_ERROR);
   }
 
   if (otpRecord.expiresAt.getTime() < Date.now()) {

@@ -38,7 +38,8 @@ import {
 } from '@/modules/bookings/provider-reassignment.service.js';
 import { addTimelineEvent, listTimelineEvents } from '@/modules/bookings/timeline.service.js';
 import { notifyBookingEvent } from '@/modules/notifications/notification.service.js';
-import { emitAvailabilityChanged, emitBookingStatusChanged, emitToProvider } from '@/modules/realtime/socket.service.js';
+import { broadcastBookingRealtimeUpdate } from '@/modules/realtime/booking-realtime.service.js';
+import { emitAvailabilityChanged } from '@/modules/realtime/socket.service.js';
 import { getPaymentGateway, initialPaymentStatus } from '@/modules/payments/payment-gateway.js';
 import { getBlockingIntervals } from '@/modules/provider-availability/availability.service.js';
 import { consumeSlotReservation } from '@/modules/provider-availability/reservation.service.js';
@@ -455,16 +456,19 @@ export async function createBookingFromReservation(
   }
 
   const bookingId = booking._id.toString();
-  emitBookingStatusChanged(customerId, {
-    bookingId,
-    status: booking.status,
-    action: 'CREATED',
-  });
-  emitToProvider(reservation.providerId.toString(), 'booking:status-changed', {
-    bookingId,
-    status: booking.status,
-    action: 'BOOKING_REQUESTED',
-  });
+  broadcastBookingRealtimeUpdate(
+    {
+      bookingId,
+      status: booking.status,
+      action: 'CREATED',
+      providerId: reservation.providerId.toString(),
+      customerId,
+    },
+    {
+      customerId,
+      providerId: reservation.providerId.toString(),
+    },
+  );
 
   const scheduleDoc = await getProviderScheduleDocument(reservation.providerId.toString());
   const bookingTimezone = scheduleDoc?.timezone ?? 'Asia/Kolkata';
@@ -649,18 +653,19 @@ export async function cancelCustomerBooking(customerId: string, bookingId: strin
     metadata: { reason },
   });
 
-  emitBookingStatusChanged(customerId, {
-    bookingId,
-    status: booking.status,
-    action: 'CUSTOMER_CANCEL',
-  });
-  if (booking.providerId) {
-    emitToProvider(booking.providerId.toString(), 'booking:status-changed', {
+  broadcastBookingRealtimeUpdate(
+    {
       bookingId,
       status: booking.status,
-      action: 'CUSTOMER_CANCEL',
-    });
-  }
+      action: 'CANCELLED',
+      customerId,
+      providerId: booking.providerId?.toString(),
+    },
+    {
+      customerId,
+      providerId: booking.providerId?.toString(),
+    },
+  );
 
   return serializeBookingSummary(booking);
 }
@@ -694,11 +699,19 @@ export async function expirePendingProviderRequests() {
       booking._id.toString(),
     );
 
-    emitBookingStatusChanged(booking.customerId.toString(), {
-      bookingId: booking._id.toString(),
-      status: booking.status,
-      action: 'PROVIDER_REQUEST_EXPIRED',
-    });
+    broadcastBookingRealtimeUpdate(
+      {
+        bookingId: booking._id.toString(),
+        status: booking.status,
+        action: 'UPDATED',
+        customerId: booking.customerId.toString(),
+        providerId: booking.providerId.toString(),
+      },
+      {
+        customerId: booking.customerId.toString(),
+        providerId: booking.providerId.toString(),
+      },
+    );
 
     expired += 1;
   }
@@ -879,16 +892,19 @@ export async function redispatchAfterNoShow(
   const { setProviderOnline } = await import('@/modules/presence/presence.service.js');
   await setProviderOnline(claimed.providerId.toString());
 
-  emitBookingStatusChanged(customerId, {
-    bookingId: claimed._id.toString(),
-    status: BookingStatus.CANCELLED,
-    action: 'CUSTOMER_CANCEL',
-  });
-  emitToProvider(claimed.providerId.toString(), 'booking:status-changed', {
-    bookingId: claimed._id.toString(),
-    status: BookingStatus.CANCELLED,
-    action: 'CUSTOMER_CANCEL',
-  });
+  broadcastBookingRealtimeUpdate(
+    {
+      bookingId: claimed._id.toString(),
+      status: BookingStatus.CANCELLED,
+      action: 'CANCELLED',
+      customerId,
+      providerId: claimed.providerId.toString(),
+    },
+    {
+      customerId,
+      providerId: claimed.providerId.toString(),
+    },
+  );
 
   await notifyBookingEvent(
     customerId,

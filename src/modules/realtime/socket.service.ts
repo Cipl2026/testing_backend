@@ -1,6 +1,8 @@
 import type { Server as SocketIOServer } from 'socket.io';
 import { UserRole } from '@ghaarfix/shared-types';
 
+import { buildRealtimeEnvelope } from '@/modules/realtime/realtime-events.js';
+
 let io: SocketIOServer | null = null;
 
 export function setSocketServer(server: SocketIOServer): void {
@@ -44,7 +46,16 @@ export function emitUrgentCancelled(customerId: string, payload: unknown): void 
 }
 
 export function emitUrgentNewRequest(providerId: string, payload: unknown): void {
-  emitToProvider(providerId, 'urgent:new-request', payload);
+  const envelope =
+    payload && typeof payload === 'object' && 'eventId' in (payload as object)
+      ? payload
+      : buildRealtimeEnvelope(
+          typeof payload === 'object' && payload !== null
+            ? (payload as Record<string, unknown>)
+            : {},
+        );
+  emitToProvider(providerId, 'urgent:new-request', envelope);
+  emitToProvider(providerId, 'provider:new_job', envelope);
 }
 
 export function emitUrgentRequestClosed(providerId: string, payload: unknown): void {
@@ -76,11 +87,19 @@ export function emitInvoiceReady(customerId: string, payload: unknown): void {
 }
 
 export function emitNotificationNew(userId: string, role: UserRole, payload: unknown): void {
+  const envelope =
+    payload && typeof payload === 'object' && 'eventId' in (payload as object)
+      ? payload
+      : buildRealtimeEnvelope(
+          typeof payload === 'object' && payload !== null
+            ? (payload as Record<string, unknown>)
+            : { payload: String(payload) },
+        );
   if (role === UserRole.PROVIDER) {
-    emitToProvider(userId, 'notification:new', payload);
+    emitToProvider(userId, 'notification:new', envelope);
     return;
   }
-  emitToCustomer(userId, 'notification:new', payload);
+  emitToCustomer(userId, 'notification:new', envelope);
 }
 
 export function emitSupportMessage(customerId: string, payload: unknown): void {

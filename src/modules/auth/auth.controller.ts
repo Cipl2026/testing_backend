@@ -24,6 +24,11 @@ export const registerVerifyOtp = asyncHandler(async (req: Request, res: Response
   sendSuccess(res, 'Account created successfully', result);
 });
 
+export const registerResendOtp = asyncHandler(async (req: Request, res: Response) => {
+  const result = await authService.registerResendOtp(req.body);
+  sendSuccess(res, 'OTP resent successfully', result);
+});
+
 export const loginWithMpin = asyncHandler(async (req: Request, res: Response) => {
   const result = await authService.loginWithMpin(req.body);
   sendSuccess(res, 'Login successful', result);
