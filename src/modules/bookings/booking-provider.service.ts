@@ -68,7 +68,11 @@ export async function listProviderBookings(
     filter.providerRequestStatus = ProviderRequestStatus.PENDING;
   } else if (query.tab === 'upcoming') {
     filter.status = {
-      $in: [BookingStatus.CONFIRMED, BookingStatus.RESCHEDULE_REQUESTED],
+      $in: [
+        BookingStatus.PENDING_PROVIDER,
+        BookingStatus.CONFIRMED,
+        BookingStatus.RESCHEDULE_REQUESTED,
+      ],
     };
   } else if (query.tab === 'in_progress') {
     filter.status = {

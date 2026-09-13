@@ -102,3 +102,46 @@ export async function serializeCustomerUser(user: IUser, profile: ICustomerProfi
     dateOfBirth: profile?.dateOfBirth?.toISOString().split('T')[0],
   });
 }
+
+export interface ProviderProfileDto {
+  fullName?: string;
+  email?: string;
+  profileImage?: string;
+  dateOfBirth?: string;
+  gender?: string;
+  experienceYears?: number;
+  bio?: string;
+  languages: string[];
+  serviceBaseLatitude?: number;
+  serviceBaseLongitude?: number;
+  normalBookingRadiusKm?: number;
+  urgentBookingRadiusKm?: number;
+  acceptsUrgentJobs: boolean;
+  isProfileComplete: boolean;
+  isVerified: boolean;
+  providerStatus: string;
+}
+
+export function serializeProviderProfile(
+  profile: IProviderProfile,
+  user?: IUser | null,
+): ProviderProfileDto {
+  return {
+    fullName: profile.fullName ?? user?.fullName,
+    email: profile.email ?? user?.email,
+    profileImage: profile.profileImage ?? user?.profileImage,
+    dateOfBirth: profile.dateOfBirth?.toISOString().split('T')[0],
+    gender: profile.gender,
+    experienceYears: profile.experienceYears,
+    bio: profile.bio,
+    languages: profile.languages ?? [],
+    serviceBaseLatitude: profile.serviceBase?.latitude,
+    serviceBaseLongitude: profile.serviceBase?.longitude,
+    normalBookingRadiusKm: profile.normalBookingRadiusKm,
+    urgentBookingRadiusKm: profile.urgentBookingRadiusKm,
+    acceptsUrgentJobs: profile.acceptsUrgentJobs !== false,
+    isProfileComplete: profile.isProfileComplete,
+    isVerified: profile.isVerified,
+    providerStatus: profile.providerStatus,
+  };
+}

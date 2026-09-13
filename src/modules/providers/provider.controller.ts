@@ -10,7 +10,13 @@ import { ErrorCode } from '@ghaarfix/shared-types';
 
 export const updateProfile = asyncHandler(async (req: Request, res: Response) => {
   const user = await providerService.updateProviderProfile(req.auth!.userId, req.body);
-  sendSuccess(res, 'Profile updated successfully', { user });
+  const profile = await providerService.getProviderProfile(req.auth!.userId);
+  sendSuccess(res, 'Profile updated successfully', { user, profile });
+});
+
+export const getProfile = asyncHandler(async (req: Request, res: Response) => {
+  const profile = await providerService.getProviderProfile(req.auth!.userId);
+  sendSuccess(res, 'Profile fetched successfully', profile);
 });
 
 export const uploadProfileImage = asyncHandler(async (req: Request, res: Response) => {

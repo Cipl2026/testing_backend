@@ -14,6 +14,13 @@ import { paginationQuerySchema } from '@ghaarfix/validation';
 
 const router = Router();
 
+router.get(
+  '/profile',
+  authenticate,
+  authorize(UserRole.PROVIDER),
+  providerController.getProfile,
+);
+
 router.patch(
   '/profile',
   authenticate,

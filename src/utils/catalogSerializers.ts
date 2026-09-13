@@ -60,6 +60,10 @@ export function serializeService(
     isUrgentAvailable: service.isUrgentAvailable,
     urgentConfig: service.urgentConfig,
     displayOrder: service.displayOrder,
+    providerType: service.providerType,
+    hourlyEligible: service.hourlyEligible,
+    instantEligible: service.instantEligible,
+    compatibilityGroup: service.compatibilityGroup,
     isFavorite: extras?.isFavorite ?? false,
   };
 }

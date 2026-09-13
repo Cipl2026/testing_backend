@@ -36,6 +36,7 @@ import { runPhase21Jobs } from '@/modules/reliability/phase21-jobs.js';
 import { runPhase22Jobs } from '@/modules/security/phase22-jobs.js';
 import { runPhase23Jobs } from '@/modules/performance/phase23-jobs.js';
 import { runPhase24Jobs } from '@/modules/globalization/phase24-jobs.js';
+import { backfillProviderUrgentFlags } from '@/modules/provider-services/provider-service.service.js';
 import { logger } from '@/utils/logger.js';
 import { rebuildProviderGeoIndex } from '@/infra/provider-geo.service.js';
 import { runHomeHelpRecurringJobs } from '@/modules/home-help/home-help-recurring.jobs.js';
@@ -69,6 +70,15 @@ export async function runStartupJobs(): Promise<void> {
     }
   } catch (error) {
     logger.error('Failed to rebuild provider GEO index', { error });
+  }
+
+  try {
+    const urgentFlagsUpdated = await backfillProviderUrgentFlags();
+    if (urgentFlagsUpdated > 0) {
+      logger.info('Backfilled provider urgent service flags', { count: urgentFlagsUpdated });
+    }
+  } catch (error) {
+    logger.error('Failed to backfill provider urgent flags', { error });
   }
 }
 

@@ -2,8 +2,9 @@ import { ProviderStatus, UserRole, ErrorCode, ProviderServiceApprovalStatus } fr
 import { ProviderProfile } from '@/models/ProviderProfile.js';
 import { ProviderService } from '@/models/ProviderService.js';
 import { User } from '@/models/User.js';
+import { syncProviderServiceUrgentFlags } from '@/modules/provider-services/provider-service.service.js';
 import { AppError } from '@/utils/AppError.js';
-import { serializeUser } from '@/utils/serializers.js';
+import { serializeUser, serializeProviderProfile } from '@/utils/serializers.js';
 import type { ProviderProfileInput } from '@/validators/auth.js';
 
 export async function updateProviderProfile(userId: string, input: ProviderProfileInput) {
@@ -61,6 +62,7 @@ export async function updateProviderProfile(userId: string, input: ProviderProfi
       { providerId: user._id, approvalStatus: ProviderServiceApprovalStatus.PENDING },
       { approvalStatus: ProviderServiceApprovalStatus.APPROVED, rejectionReason: undefined },
     );
+    await syncProviderServiceUrgentFlags(user._id.toString());
   }
 
   user.fullName = profile.fullName;
@@ -73,6 +75,13 @@ export async function updateProviderProfile(userId: string, input: ProviderProfi
 }
 
 export async function getProviderProfile(userId: string) {
+  const user = await User.findById(userId);
+  if (!user || user.role !== UserRole.PROVIDER) {
+    throw new AppError('Provider profile not found.', 404, ErrorCode.NOT_FOUND);
+  }
   const profile = await ProviderProfile.findOne({ userId });
-  return profile;
+  if (!profile) {
+    throw new AppError('Provider profile not found.', 404, ErrorCode.NOT_FOUND);
+  }
+  return serializeProviderProfile(profile, user);
 }

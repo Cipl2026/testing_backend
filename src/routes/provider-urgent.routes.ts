@@ -54,6 +54,12 @@ router.post(
   urgentProviderController.setOffline,
 );
 router.post(
+  '/presence/busy',
+  authenticate,
+  authorize(UserRole.PROVIDER),
+  urgentProviderController.setBusy,
+);
+router.post(
   '/presence/heartbeat',
   authenticate,
   authorize(UserRole.PROVIDER),

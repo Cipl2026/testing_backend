@@ -213,6 +213,7 @@ export async function matchUrgentProviders(input: {
     ProviderProfile.find({
       userId: { $in: providerIds },
       providerStatus: ProviderStatus.ACTIVE,
+      acceptsUrgentJobs: { $ne: false },
     }).select('userId'),
     ProviderService.find({
       providerId: { $in: providerIds },
@@ -352,6 +353,7 @@ export async function matchOfflineUrgentProviders(input: {
     ProviderProfile.find({
       userId: { $in: providerIds },
       providerStatus: ProviderStatus.ACTIVE,
+      acceptsUrgentJobs: { $ne: false },
     }).select('userId'),
     PushToken.find({ providerId: { $in: providerIds }, isActive: true }).distinct('providerId'),
     ProviderPresence.find({ providerId: { $in: providerIds } }).select(

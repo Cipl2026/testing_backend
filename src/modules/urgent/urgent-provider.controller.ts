@@ -44,6 +44,11 @@ export const setOffline = asyncHandler(async (req: Request, res: Response) => {
   sendSuccess(res, 'You are now offline.', data);
 });
 
+export const setBusy = asyncHandler(async (req: Request, res: Response) => {
+  const data = await presenceService.setProviderBusy(req.auth!.userId);
+  sendSuccess(res, 'You are now busy.', data);
+});
+
 export const heartbeat = asyncHandler(async (req: Request, res: Response) => {
   const data = await presenceService.heartbeatProvider(req.auth!.userId, req.body);
   sendSuccess(res, 'Presence updated.', data);
