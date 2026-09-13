@@ -20,6 +20,19 @@ export async function updateProviderProfile(userId: string, input: ProviderProfi
   if (input.experienceYears !== undefined) update.experienceYears = input.experienceYears;
   if (input.bio !== undefined) update.bio = input.bio;
   if (input.languages !== undefined) update.languages = input.languages;
+  if (input.serviceBaseLatitude !== undefined && input.serviceBaseLongitude !== undefined) {
+    update.serviceBase = {
+      latitude: input.serviceBaseLatitude,
+      longitude: input.serviceBaseLongitude,
+    };
+  }
+  if (input.normalBookingRadiusKm !== undefined) {
+    update.normalBookingRadiusKm = input.normalBookingRadiusKm;
+  }
+  if (input.urgentBookingRadiusKm !== undefined) {
+    update.urgentBookingRadiusKm = input.urgentBookingRadiusKm;
+  }
+  if (input.acceptsUrgentJobs !== undefined) update.acceptsUrgentJobs = input.acceptsUrgentJobs;
 
   const profile = await ProviderProfile.findOneAndUpdate(
     { userId: user._id },
@@ -31,7 +44,11 @@ export async function updateProviderProfile(userId: string, input: ProviderProfi
     profile.fullName &&
       profile.fullName.trim().length >= 2 &&
       profile.experienceYears !== undefined &&
-      profile.languages.length > 0,
+      profile.languages.length > 0 &&
+      profile.serviceBase?.latitude != null &&
+      profile.serviceBase?.longitude != null &&
+      profile.normalBookingRadiusKm != null &&
+      profile.urgentBookingRadiusKm != null,
   );
 
   profile.isProfileComplete = isComplete;

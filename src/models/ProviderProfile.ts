@@ -16,6 +16,13 @@ export interface IProviderProfile extends Document {
   providerStatus: ProviderStatus;
   isProfileComplete: boolean;
   isVerified: boolean;
+  serviceBase?: {
+    latitude: number;
+    longitude: number;
+  };
+  normalBookingRadiusKm?: number;
+  urgentBookingRadiusKm?: number;
+  acceptsUrgentJobs?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -41,6 +48,13 @@ const providerProfileSchema = new Schema<IProviderProfile>(
     },
     isProfileComplete: { type: Boolean, default: false },
     isVerified: { type: Boolean, default: false },
+    serviceBase: {
+      latitude: { type: Number, min: -90, max: 90 },
+      longitude: { type: Number, min: -180, max: 180 },
+    },
+    normalBookingRadiusKm: { type: Number, min: 1, max: 200, default: 10 },
+    urgentBookingRadiusKm: { type: Number, min: 1, max: 200, default: 5 },
+    acceptsUrgentJobs: { type: Boolean, default: true },
   },
   { timestamps: true },
 );

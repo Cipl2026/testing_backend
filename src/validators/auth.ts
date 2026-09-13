@@ -32,12 +32,28 @@ export const customerProfileSchema = z.object({
 export const providerProfileSchema = z.object({
   fullName: z.string().trim().min(2, 'Full name must be at least 2 characters').optional(),
   email: z.string().email('Invalid email address').optional().or(z.literal('')),
-  profileImage: z.string().url('Invalid profile image URL').optional(),
+  profileImage: z
+    .string()
+    .trim()
+    .min(1)
+    .refine(
+      (value) =>
+        value.startsWith('http://') ||
+        value.startsWith('https://') ||
+        value.startsWith('/api/'),
+      'Invalid profile image URL',
+    )
+    .optional(),
   dateOfBirth: z.string().optional(),
   gender: z.enum(['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY']).optional(),
   experienceYears: z.number().int().min(0).max(60).optional(),
   bio: z.string().max(1000).optional(),
   languages: z.array(z.string().trim().min(1)).max(10).optional(),
+  serviceBaseLatitude: z.number().min(-90).max(90).optional(),
+  serviceBaseLongitude: z.number().min(-180).max(180).optional(),
+  normalBookingRadiusKm: z.number().min(1).max(200).optional(),
+  urgentBookingRadiusKm: z.number().min(1).max(200).optional(),
+  acceptsUrgentJobs: z.boolean().optional(),
 });
 
 export const adminLoginSchema = z.object({

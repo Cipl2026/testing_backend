@@ -8,14 +8,12 @@ let provider: OtpProvider | null = null;
 
 export function getOtpProvider(): OtpProvider {
   if (!provider) {
-    if (env.isTest) {
+    if (env.isTest || !env.isProd) {
       provider = new ConsoleOtpProvider();
     } else if (isNimbusConfigured()) {
       provider = new SmsOtpProvider();
-    } else if (env.isProd) {
-      provider = new SmsOtpProvider();
     } else {
-      provider = new ConsoleOtpProvider();
+      provider = new SmsOtpProvider();
     }
   }
   return provider;
