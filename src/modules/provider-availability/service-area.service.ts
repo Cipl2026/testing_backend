@@ -12,6 +12,11 @@ export async function listServiceAreas(providerId: string) {
 }
 
 export async function createServiceArea(providerId: string, input: ServiceAreaBody) {
+  const existing = await ProviderServiceArea.findOne({ providerId, name: input.name });
+  if (existing) {
+    return serializeServiceArea(existing);
+  }
+
   try {
     const area = await ProviderServiceArea.create({
       providerId,

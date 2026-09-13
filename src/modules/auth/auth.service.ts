@@ -152,9 +152,18 @@ export async function verifyOtp(input: VerifyOtpInput) {
   await otpRecord.save();
 
   let user = await User.findOne({ phone, role });
-  const isNewUser = !user;
+  let isNewUser = !user;
 
   if (!user) {
+    const existingPhone = await User.findOne({ phone });
+    if (existingPhone) {
+      throw new AppError(
+        'This phone number is already registered. Please sign in with the app you used to register.',
+        409,
+        ErrorCode.CONFLICT,
+      );
+    }
+
     if (role === UserRole.CUSTOMER) {
       if (!env.isTest) {
         throw new AppError(
@@ -164,27 +173,75 @@ export async function verifyOtp(input: VerifyOtpInput) {
         );
       }
 
-      user = await User.create({
-        phone,
-        role,
-        isPhoneVerified: true,
-        isProfileComplete: false,
-        status: 'ACTIVE',
-      });
+      try {
+        user = await User.create({
+          phone,
+          role,
+          isPhoneVerified: true,
+          isProfileComplete: false,
+          status: 'ACTIVE',
+        });
 
-      await CustomerProfile.create({
-        userId: user._id,
-        fullName: 'Test Customer',
-      });
+        await CustomerProfile.create({
+          userId: user._id,
+          fullName: 'Test Customer',
+        });
+      } catch (err) {
+        if (isDuplicateKeyError(err)) {
+          user = await User.findOne({ phone, role });
+          if (!user) {
+            throw new AppError(
+              'An account already exists with this number. Please try again.',
+              409,
+              ErrorCode.CONFLICT,
+            );
+          }
+          isNewUser = false;
+        } else {
+          throw err;
+        }
+      }
     } else {
-      user = await User.create({
-        phone,
-        role,
-        isPhoneVerified: true,
-        isProfileComplete: false,
-        status: 'ACTIVE',
-      });
+      try {
+        user = await User.create({
+          phone,
+          role,
+          isPhoneVerified: true,
+          isProfileComplete: false,
+          status: 'ACTIVE',
+        });
 
+        await ProviderProfile.create({
+          userId: user._id,
+          providerStatus: ProviderStatus.PENDING,
+          isProfileComplete: false,
+          isVerified: false,
+          languages: [],
+        });
+      } catch (err) {
+        if (isDuplicateKeyError(err)) {
+          user = await User.findOne({ phone, role });
+          if (!user) {
+            throw new AppError(
+              'An account already exists with this number. Please try again.',
+              409,
+              ErrorCode.CONFLICT,
+            );
+          }
+          isNewUser = false;
+        } else {
+          throw err;
+        }
+      }
+    }
+  } else {
+    user.isPhoneVerified = true;
+    await user.save();
+  }
+
+  if (role === UserRole.PROVIDER) {
+    const profileExists = await ProviderProfile.exists({ userId: user._id });
+    if (!profileExists) {
       await ProviderProfile.create({
         userId: user._id,
         providerStatus: ProviderStatus.PENDING,
@@ -193,9 +250,6 @@ export async function verifyOtp(input: VerifyOtpInput) {
         languages: [],
       });
     }
-  } else {
-    user.isPhoneVerified = true;
-    await user.save();
   }
 
   const tokens = await issueTokens(user._id.toString(), user.role);
@@ -577,4 +631,12 @@ export async function issueTokens(
   });
 
   return { accessToken, refreshToken, sessionId, familyId };
+}
+
+function isDuplicateKeyError(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    err.name === 'MongoServerError' &&
+    (err as { code?: number }).code === 11000
+  );
 }

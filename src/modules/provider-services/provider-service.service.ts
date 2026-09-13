@@ -33,7 +33,9 @@ export async function createProviderService(
   const service = await Service.findOne({ _id: input.serviceId, isActive: true });
   if (!service) throw new AppError('Service is not available.', 404, ErrorCode.NOT_FOUND);
   const duplicate = await ProviderService.findOne({ providerId, serviceId: input.serviceId });
-  if (duplicate) throw new AppError('You already offer this service.', 409, ErrorCode.CONFLICT);
+  if (duplicate) {
+    return serializeProviderService(duplicate, { service });
+  }
   const record = await ProviderService.create({
     providerId,
     serviceId: input.serviceId,

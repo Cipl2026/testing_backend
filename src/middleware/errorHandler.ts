@@ -43,7 +43,18 @@ export function errorHandler(
   if (err instanceof Error && err.name === 'MongoServerError') {
     const code = (err as { code?: number }).code;
     if (code === 11000) {
-      sendError(res, 'Resource already exists.', ErrorCode.CONFLICT, 409, requestId);
+      const keyValue = (err as { keyValue?: Record<string, unknown> }).keyValue ?? {};
+      let message = 'Resource already exists.';
+      if ('phone' in keyValue) {
+        message = 'An account already exists with this phone number.';
+      } else if ('providerId' in keyValue && 'serviceId' in keyValue) {
+        message = 'You already offer this service.';
+      } else if ('providerId' in keyValue && 'name' in keyValue) {
+        message = 'Service area with this name already exists.';
+      } else if ('userId' in keyValue) {
+        message = 'Profile already exists for this account.';
+      }
+      sendError(res, message, ErrorCode.CONFLICT, 409, requestId);
       return;
     }
     void captureError(err, { errorCode: ErrorCode.DATABASE_ERROR, requestId, traceId: req.traceId });
