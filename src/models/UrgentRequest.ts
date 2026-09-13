@@ -2,6 +2,7 @@ import mongoose, { type Document, Schema, Types } from 'mongoose';
 import {
   PaymentMethod,
   UrgentRequestStatus,
+  type QuickServicesSnapshot,
 } from '@ghaarfix/shared-types';
 import type { AddressSnapshot, HomeHelpBookingSnapshot } from '@/models/Booking.js';
 
@@ -51,6 +52,7 @@ export interface IUrgentRequest extends Document {
     actorRole?: string;
   };
   homeHelp?: HomeHelpBookingSnapshot;
+  quickServices?: QuickServicesSnapshot;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -128,6 +130,10 @@ const urgentRequestSchema = new Schema<IUrgentRequest>(
           notes: String,
         },
       ],
+    },
+    quickServices: {
+      bookingMode: { type: String, enum: ['instant', 'scheduled', 'recurring'] },
+      photoUrls: { type: [String], default: undefined },
     },
   },
   { timestamps: true },

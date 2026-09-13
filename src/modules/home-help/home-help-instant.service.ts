@@ -12,7 +12,7 @@ import { env } from '@/config/env.js';
 import { UrgentRequestStatus } from '@ghaarfix/shared-types';
 import { startUrgentSearchWaves } from '@/modules/urgent/urgent-wave.service.js';
 import { serializeUrgentRequestSummary } from '@/utils/urgentSerializers.js';
-import type { HomeHelpTaskSelection } from '@ghaarfix/shared-types';
+import type { HomeHelpTaskSelection, QuickServicesSnapshot } from '@ghaarfix/shared-types';
 
 export async function createInstantHomeHelpRequest(
   customerId: string,
@@ -22,6 +22,7 @@ export async function createInstantHomeHelpRequest(
     tasks: HomeHelpTaskSelection[];
     generalNotes?: string;
     paymentMethod: PaymentMethod;
+    quickServices?: QuickServicesSnapshot;
   },
 ) {
   const [anchorService, address, homeHelpPayload] = await Promise.all([
@@ -93,6 +94,7 @@ export async function createInstantHomeHelpRequest(
         notes: task.notes,
       })),
     },
+    quickServices: input.quickServices,
   });
 
   await startUrgentSearchWaves(request._id.toString());

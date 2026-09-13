@@ -1,6 +1,13 @@
 import { z } from 'zod';
-import { HomeHelpTaskPriority, PaymentMethod } from '@ghaarfix/shared-types';
+import { HomeHelpTaskPriority, PaymentMethod, QuickServicesBookingMode } from '@ghaarfix/shared-types';
 import { objectIdSchema } from '@ghaarfix/validation';
+
+export const quickServicesPayloadSchema = z
+  .object({
+    bookingMode: z.nativeEnum(QuickServicesBookingMode),
+    photoUrls: z.array(z.string().min(1).max(2048)).max(3).optional(),
+  })
+  .optional();
 
 export const homeHelpTaskSelectionSchema = z.object({
   serviceId: z.string().min(1),
@@ -12,6 +19,7 @@ export const homeHelpQuoteBodySchema = z.object({
   durationPackageId: z.string().min(1),
   tasks: z.array(homeHelpTaskSelectionSchema).min(1).max(8),
   generalNotes: z.string().max(500).optional(),
+  quickServices: quickServicesPayloadSchema,
 });
 
 export const homeHelpReservationBodySchema = homeHelpQuoteBodySchema.extend({

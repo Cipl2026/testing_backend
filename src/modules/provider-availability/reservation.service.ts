@@ -74,6 +74,10 @@ export async function createSlotReservation(
         notes?: string;
       }>;
     };
+    quickServices?: {
+      bookingMode: 'instant' | 'scheduled' | 'recurring';
+      photoUrls?: string[];
+    };
   },
 ) {
   const service = await Service.findOne({ _id: input.serviceId, isActive: true });
@@ -198,6 +202,7 @@ export async function createSlotReservation(
           })),
         }
       : undefined,
+    quickServices: input.quickServices,
   }).catch(async (error) => {
     await releaseSlotHold(input.providerId, start);
     throw error;

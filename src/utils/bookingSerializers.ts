@@ -95,6 +95,7 @@ export function serializeBookingSummary(booking: IBooking, audience: 'customer' 
           })),
         }
       : undefined,
+    quickServices: booking.quickServices,
     createdAt: booking.createdAt.toISOString(),
   };
 }

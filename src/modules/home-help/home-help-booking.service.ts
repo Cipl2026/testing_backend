@@ -1,7 +1,7 @@
 import { createSlotReservation } from '@/modules/provider-availability/reservation.service.js';
 import { getAnchorService } from '@/modules/home-help/home-help-catalog.service.js';
 import { buildHomeHelpReservationPayload } from '@/modules/home-help/home-help-quote.service.js';
-import type { HomeHelpTaskSelection } from '@ghaarfix/shared-types';
+import type { HomeHelpTaskSelection, QuickServicesSnapshot } from '@ghaarfix/shared-types';
 
 export async function createHomeHelpReservation(
   customerId: string,
@@ -13,6 +13,7 @@ export async function createHomeHelpReservation(
     tasks: HomeHelpTaskSelection[];
     generalNotes?: string;
     homeId?: string;
+    quickServices?: QuickServicesSnapshot;
   },
 ) {
   const [anchorService, homeHelpPayload] = await Promise.all([
@@ -32,5 +33,6 @@ export async function createHomeHelpReservation(
     homeId: input.homeId,
     durationMinutesOverride: homeHelpPayload.durationMinutes,
     homeHelp: homeHelpPayload,
+    quickServices: input.quickServices,
   });
 }

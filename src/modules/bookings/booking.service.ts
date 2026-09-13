@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
 import { DateTime } from 'luxon';
 import {
-  BookingSource,
   BookingStatus,
   BookingType,
   ErrorCode,
@@ -21,6 +20,7 @@ import { PriceChangeStatus } from '@ghaarfix/shared-types';
 import { UrgentRequest } from '@/models/UrgentRequest.js';
 import { customerCompletionOtp } from '@/modules/bookings/service-completion-otp.service.js';
 import { customerStartOtp } from '@/modules/bookings/service-start-otp.service.js';
+import { resolveBookingSource } from '@/modules/bookings/booking-source.util.js';
 import { BookingIdempotency } from '@/models/BookingIdempotency.js';
 import { BookingParticipant } from '@/models/BookingParticipant.js';
 import { CustomerAddress } from '@/models/CustomerAddress.js';
@@ -268,7 +268,10 @@ export async function createBookingFromReservation(
   const booking = await Booking.create({
     bookingNumber,
     bookingType: BookingType.SCHEDULED,
-    source: reservation.homeHelp ? BookingSource.HOME_HELP : BookingSource.SLOT_RESERVATION,
+    source: resolveBookingSource({
+      quickServices: reservation.quickServices,
+      homeHelp: reservation.homeHelp,
+    }),
     customerId,
     providerId: reservation.providerId,
     serviceId: reservation.serviceId,
@@ -348,6 +351,7 @@ export async function createBookingFromReservation(
           })),
         }
       : undefined,
+    quickServices: reservation.quickServices,
   });
 
   const payment = await Payment.create({

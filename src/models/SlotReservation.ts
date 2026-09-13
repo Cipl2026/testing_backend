@@ -1,5 +1,5 @@
 import mongoose, { type Document, Schema, Types } from 'mongoose';
-import { SlotReservationStatus, type HomeHelpTaskPriority } from '@ghaarfix/shared-types';
+import { SlotReservationStatus, type HomeHelpTaskPriority, type QuickServicesSnapshot } from '@ghaarfix/shared-types';
 
 export interface HomeHelpReservationPayload {
   durationPackageId: Types.ObjectId;
@@ -28,6 +28,7 @@ export interface ISlotReservation extends Document {
   expiresAt: Date;
   serviceZoneId?: Types.ObjectId;
   homeHelp?: HomeHelpReservationPayload;
+  quickServices?: QuickServicesSnapshot;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -64,6 +65,10 @@ const slotReservationSchema = new Schema<ISlotReservation>(
           notes: String,
         },
       ],
+    },
+    quickServices: {
+      bookingMode: { type: String, enum: ['instant', 'scheduled', 'recurring'] },
+      photoUrls: { type: [String], default: undefined },
     },
   },
   { timestamps: true },

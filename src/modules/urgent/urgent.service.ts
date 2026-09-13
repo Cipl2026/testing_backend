@@ -1,6 +1,5 @@
 import {
   ACTIVE_URGENT_REQUEST_STATUSES,
-  BookingSource,
   BookingStatus,
   BookingType,
   ErrorCode,
@@ -42,6 +41,7 @@ import {
   serializeUrgentRequestSummary,
 } from '@/utils/urgentSerializers.js';
 import { generateUrgentRequestNumber } from '@/utils/urgentNumber.js';
+import { resolveBookingSource } from '@/modules/bookings/booking-source.util.js';
 import type { CreateUrgentRequestBody } from '@/validators/urgent.js';
 import type { ServiceUrgentConfig } from '@/models/Service.js';
 
@@ -172,6 +172,7 @@ export async function createUrgentRequest(
     location: { type: 'Point', coordinates: [lng, lat] },
     customerNotes: input.notes,
     customServiceName: input.customServiceName,
+    quickServices: input.quickServices,
     status: UrgentRequestStatus.SEARCHING,
     paymentMethod: input.paymentMethod,
     pricing,
@@ -338,7 +339,11 @@ export async function convertUrgentToBooking(
   const booking = await Booking.create({
     bookingNumber: await generateBookingNumber(),
     bookingType: BookingType.URGENT,
-    source: request.homeHelp ? BookingSource.HOME_HELP : BookingSource.URGENT_FIX,
+    source: resolveBookingSource({
+      quickServices: request.quickServices,
+      homeHelp: request.homeHelp,
+      urgent: true,
+    }),
     customerId: request.customerId,
     providerId,
     serviceId: request.serviceId,
@@ -394,6 +399,7 @@ export async function convertUrgentToBooking(
           })),
         }
       : undefined,
+    quickServices: request.quickServices,
   });
 
   const payment = await Payment.create({

@@ -1,5 +1,12 @@
 import { z } from 'zod';
-import { PaymentMethod } from '@ghaarfix/shared-types';
+import { PaymentMethod, QuickServicesBookingMode } from '@ghaarfix/shared-types';
+
+export const quickServicesPayloadSchema = z
+  .object({
+    bookingMode: z.nativeEnum(QuickServicesBookingMode),
+    photoUrls: z.array(z.string().min(1).max(2048)).max(3).optional(),
+  })
+  .optional();
 
 export const createUrgentRequestBodySchema = z
   .object({
@@ -8,6 +15,7 @@ export const createUrgentRequestBodySchema = z
     addressId: z.string().min(1),
     notes: z.string().max(500).optional(),
     paymentMethod: z.nativeEnum(PaymentMethod),
+    quickServices: quickServicesPayloadSchema,
   })
   .refine((data) => Boolean(data.serviceId || data.customServiceName), {
     message: 'Select a service or describe what you need.',

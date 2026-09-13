@@ -18,6 +18,7 @@ export enum BookingSource {
   SLOT_RESERVATION = 'SLOT_RESERVATION',
   URGENT_FIX = 'URGENT_FIX',
   HOME_HELP = 'HOME_HELP',
+  QUICK_SERVICES = 'QUICK_SERVICES',
 }
 
 export enum PaymentMethod {
@@ -107,6 +108,17 @@ export enum AddressLabel {
   HOME = 'HOME',
   WORK = 'WORK',
   OTHER = 'OTHER',
+}
+
+export enum QuickServicesBookingMode {
+  INSTANT = 'instant',
+  SCHEDULED = 'scheduled',
+  RECURRING = 'recurring',
+}
+
+export interface QuickServicesSnapshot {
+  bookingMode: QuickServicesBookingMode;
+  photoUrls?: string[];
 }
 
 export enum ServiceAreaType {

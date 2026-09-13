@@ -10,6 +10,7 @@ import {
   type AssetSnapshot,
   BookingContextType,
   type HomeHelpTaskPriority,
+  type QuickServicesSnapshot,
 } from '@ghaarfix/shared-types';
 
 export interface AddressSnapshot {
@@ -146,6 +147,7 @@ export interface IBooking extends Document {
     replacementProviderId?: Types.ObjectId;
   };
   homeHelp?: HomeHelpBookingSnapshot;
+  quickServices?: QuickServicesSnapshot;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -314,6 +316,10 @@ const bookingSchema = new Schema<IBooking>(
           notes: String,
         },
       ],
+    },
+    quickServices: {
+      bookingMode: { type: String, enum: ['instant', 'scheduled', 'recurring'] },
+      photoUrls: { type: [String], default: undefined },
     },
   },
   { timestamps: true },

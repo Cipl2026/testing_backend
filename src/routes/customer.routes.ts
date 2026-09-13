@@ -26,6 +26,14 @@ router.post(
 );
 
 router.post(
+  '/issue-photos',
+  authenticate,
+  authorize(UserRole.CUSTOMER),
+  uploadMiddleware.single('file'),
+  customerController.uploadIssuePhoto,
+);
+
+router.post(
   '/push-token',
   authenticate,
   authorize(UserRole.CUSTOMER),

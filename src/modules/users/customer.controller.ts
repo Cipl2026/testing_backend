@@ -33,3 +33,15 @@ export const uploadProfileImage = asyncHandler(async (req: Request, res: Respons
   });
   sendSuccess(res, 'Profile image updated successfully', { user });
 });
+
+export const uploadIssuePhoto = asyncHandler(async (req: Request, res: Response) => {
+  const file = req.file;
+  if (!file) {
+    throw new AppError('Image file is required.', 400, ErrorCode.VALIDATION_ERROR);
+  }
+  const stored = await storeImage(file.buffer, file.mimetype, 'customers/issue-photos');
+  sendSuccess(res, 'Issue photo uploaded successfully', {
+    fileUrl: stored.fileUrl,
+    fileKey: stored.fileKey,
+  });
+});
