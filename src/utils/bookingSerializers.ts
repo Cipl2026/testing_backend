@@ -51,7 +51,7 @@ function buildPricePayload(booking: IBooking, audience: 'customer' | 'provider' 
 }
 
 export function serializeBookingSummary(booking: IBooking, audience: 'customer' | 'provider' = 'customer') {
-  return {
+  const base = {
     id: booking._id.toString(),
     bookingNumber: booking.bookingNumber,
     bookingType: booking.bookingType,
@@ -98,6 +98,16 @@ export function serializeBookingSummary(booking: IBooking, audience: 'customer' 
     quickServices: booking.quickServices,
     createdAt: booking.createdAt.toISOString(),
   };
+
+  if (audience !== 'provider') return base;
+
+  return {
+    ...base,
+    customer: {
+      fullName: booking.addressSnapshot.recipientName,
+      phone: booking.addressSnapshot.phone,
+    },
+  };
 }
 
 export function serializeBookingDetail(
@@ -106,8 +116,23 @@ export function serializeBookingDetail(
   extras?: Record<string, unknown>,
   audience: 'customer' | 'provider' = 'customer',
 ) {
+  const summary = serializeBookingSummary(booking, audience);
+  let customer =
+    audience === 'provider' && 'customer' in summary
+      ? (summary as typeof summary & { customer?: { fullName?: string; phone?: string } }).customer
+      : undefined;
+
+  if (audience === 'provider' && extras?.serviceRecipient) {
+    const recipient = extras.serviceRecipient as { name?: string; phone?: string };
+    customer = {
+      fullName: recipient.name ?? customer?.fullName ?? booking.addressSnapshot.recipientName,
+      phone: recipient.phone ?? customer?.phone ?? booking.addressSnapshot.phone,
+    };
+  }
+
   return {
-    ...serializeBookingSummary(booking, audience),
+    ...summary,
+    ...(audience === 'provider' ? { customer } : {}),
     providerId: booking.providerId.toString(),
     serviceId: booking.serviceId.toString(),
     cancellation: booking.cancellation,

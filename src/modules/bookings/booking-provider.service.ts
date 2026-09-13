@@ -23,7 +23,7 @@ import {
   notifyBookingParticipants,
 } from '@/modules/booking-participants/booking-participant.service.js';
 import { notifyBookingEvent } from '@/modules/notifications/notification.service.js';
-import { emitBookingStatusChanged } from '@/modules/realtime/socket.service.js';
+import { emitBookingStatusChanged, emitToProvider } from '@/modules/realtime/socket.service.js';
 import {
   clearServiceCompletionOtp,
   emitServiceCompletionOtp,
@@ -198,6 +198,15 @@ export async function acceptBooking(providerId: string, bookingId: string) {
     'Your professional accepted the booking.',
     bookingId,
   );
+
+  emitBookingStatusChanged(booking.customerId.toString(), {
+    bookingId,
+    status: booking.status,
+  });
+  emitToProvider(providerId, 'booking:status-changed', {
+    bookingId,
+    status: booking.status,
+  });
 
   return serializeBookingSummary(booking, 'provider');
 }
@@ -478,6 +487,11 @@ export async function updateBookingStatusAction(
     status: booking.status,
     action,
   });
+  emitToProvider(providerId, 'booking:status-changed', {
+    bookingId,
+    status: booking.status,
+    action,
+  });
 
   return serializeBookingSummary(booking, 'provider');
 }
@@ -724,6 +738,10 @@ export async function cancelProviderBooking(
   });
 
   emitBookingStatusChanged(booking.customerId.toString(), {
+    bookingId,
+    status: booking.status,
+  });
+  emitToProvider(providerId, 'booking:status-changed', {
     bookingId,
     status: booking.status,
   });

@@ -49,7 +49,7 @@ const DEFAULT_URGENT_CONFIG: ServiceUrgentConfig = {
   enabled: true,
   baseFee: 99,
   extraFee: 50,
-  responseTimeoutMinutes: 5,
+  responseTimeoutMinutes: 10,
   maxProviderDistanceKm: 15,
   maxBroadcastProviders: 10,
 };
@@ -151,7 +151,8 @@ export async function createUrgentRequest(
   }
 
   const pricing = calculateUrgentPricing(service, urgentConfig);
-  const timeoutSeconds = urgentConfig.responseTimeoutMinutes * 60;
+  const configTimeoutSeconds = urgentConfig.responseTimeoutMinutes * 60;
+  const timeoutSeconds = Math.max(configTimeoutSeconds, env.urgent.requestTimeoutSeconds);
   const expiresAt = new Date(Date.now() + timeoutSeconds * 1000);
 
   const request = await UrgentRequest.create({

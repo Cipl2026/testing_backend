@@ -15,9 +15,9 @@ export async function getOrCreateChecklistForService(serviceId: string) {
       serviceId,
       version: 1,
       items: [
-        { label: 'Service completed as described', type: 'BOOLEAN', required: true },
-        { label: 'Work area cleaned', type: 'BOOLEAN', required: true },
-        { label: 'Customer informed of outcome', type: 'BOOLEAN', required: true },
+        { label: 'Service completed as described', itemType: 'BOOLEAN', required: true },
+        { label: 'Work area cleaned', itemType: 'BOOLEAN', required: true },
+        { label: 'Customer informed of outcome', itemType: 'BOOLEAN', required: true },
       ],
       requiredEvidence: ['BEFORE', 'AFTER'],
       status: QualityChecklistStatus.ACTIVE,
@@ -38,7 +38,7 @@ export async function snapshotChecklistForBooking(bookingId: string, serviceId: 
     version: checklist.version,
     items: checklist.items.map((item) => ({
       label: item.label,
-      type: item.type,
+      itemType: item.itemType,
       required: item.required,
       completed: false,
     })),

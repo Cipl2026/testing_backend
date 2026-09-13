@@ -2,6 +2,12 @@ import type { IUrgentDispatchTarget } from '@/models/UrgentDispatchTarget.js';
 import type { IUrgentRequest } from '@/models/UrgentRequest.js';
 import { env } from '@/config/env.js';
 
+function formatUrgentLocality(snapshot: IUrgentRequest['addressSnapshot']): string {
+  return [snapshot.addressLine1, snapshot.landmark, snapshot.city, snapshot.postalCode]
+    .filter(Boolean)
+    .join(', ');
+}
+
 export function serializeUrgentRequestSummary(request: IUrgentRequest) {
   return {
     id: request._id.toString(),
@@ -15,8 +21,11 @@ export function serializeUrgentRequestSummary(request: IUrgentRequest) {
     customerNotes: request.customerNotes,
     address: {
       addressLine1: request.addressSnapshot.addressLine1,
+      addressLine2: request.addressSnapshot.addressLine2,
+      landmark: request.addressSnapshot.landmark,
       city: request.addressSnapshot.city,
-      area: request.addressSnapshot.city,
+      postalCode: request.addressSnapshot.postalCode,
+      area: formatUrgentLocality(request.addressSnapshot),
     },
     pricing: request.pricing,
     paymentMethod: request.paymentMethod,
@@ -86,7 +95,7 @@ export function serializeProviderUrgentTarget(
     requestNumber: request.requestNumber,
     status: request.status,
     service: { name: serviceName },
-    customerArea: request.addressSnapshot.city,
+    customerArea: formatUrgentLocality(request.addressSnapshot),
     distanceMeters,
     distanceKm: Math.round((distanceMeters / 1000) * 10) / 10,
     roadDistanceMeters,

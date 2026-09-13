@@ -190,7 +190,7 @@ export interface IServiceQualityChecklist extends Document {
   version: number;
   items: Array<{
     label: string;
-    type: string;
+    itemType: string;
     required: boolean;
     validation?: string;
   }>;
@@ -206,9 +206,9 @@ const checklistSchema = new Schema<IServiceQualityChecklist>(
     version: { type: Number, default: 1 },
     items: [
       {
-        label: String,
-        type: String,
-        required: Boolean,
+        label: { type: String, required: true },
+        itemType: { type: String, required: true },
+        required: { type: Boolean, default: false },
         validation: String,
       },
     ],
@@ -232,7 +232,7 @@ export interface IChecklistSnapshot extends Document {
   bookingId: Types.ObjectId;
   checklistId: Types.ObjectId;
   version: number;
-  items: Array<{ label: string; type: string; required: boolean; completed: boolean; value?: string }>;
+  items: Array<{ label: string; itemType: string; required: boolean; completed: boolean; value?: string }>;
   completedAt?: Date;
   createdAt: Date;
 }
@@ -243,7 +243,13 @@ const checklistSnapSchema = new Schema<IChecklistSnapshot>(
     checklistId: { type: Schema.Types.ObjectId, ref: 'ServiceQualityChecklist', required: true },
     version: { type: Number, required: true },
     items: [
-      { label: String, type: String, required: Boolean, completed: Boolean, value: String },
+      {
+        label: { type: String, required: true },
+        itemType: { type: String, required: true },
+        required: { type: Boolean, default: false },
+        completed: { type: Boolean, default: false },
+        value: String,
+      },
     ],
     completedAt: Date,
   },

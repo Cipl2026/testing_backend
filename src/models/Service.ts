@@ -88,7 +88,7 @@ const serviceSchema = new Schema<IService>(
       enabled: { type: Boolean, default: false },
       baseFee: { type: Number, default: 0, min: 0 },
       extraFee: { type: Number, default: 0, min: 0 },
-      responseTimeoutMinutes: { type: Number, default: 2, min: 1 },
+      responseTimeoutMinutes: { type: Number, default: 10, min: 1 },
       maxProviderDistanceKm: { type: Number, default: 10, min: 1 },
       maxBroadcastProviders: { type: Number, default: 10, min: 1 },
     },

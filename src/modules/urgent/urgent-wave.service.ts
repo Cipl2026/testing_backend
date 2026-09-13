@@ -356,6 +356,15 @@ async function runRingNextProvider(requestId: string) {
         ],
       },
     });
+    const searchAgeMs = Date.now() - request.createdAt.getTime();
+    const minSearchMs = 90_000;
+    if (stillPending === 0 && searchAgeMs < minSearchMs) {
+      const retryConfig = await getDispatchConfig();
+      session.expandTimer = setTimeout(() => {
+        void ringNextProvider(requestId);
+      }, retryConfig.waveIntervalSeconds * 1000);
+      return;
+    }
     if (stillPending === 0) {
       await expireNoProviders(request);
     }

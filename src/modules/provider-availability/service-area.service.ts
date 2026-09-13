@@ -1,4 +1,5 @@
 import { ErrorCode, ServiceAreaType } from '@ghaarfix/shared-types';
+import { ProviderPresence } from '@/models/ProviderPresence.js';
 import { ProviderServiceArea } from '@/models/ProviderServiceArea.js';
 import { AppError } from '@/utils/AppError.js';
 import { distanceKm, normalizePostalCode } from '@/utils/intervals.js';
@@ -78,8 +79,22 @@ export function addressMatchesServiceArea(
 
 export async function providerMatchesAddress(providerId: string, address: ICustomerAddress): Promise<boolean> {
   const areas = await ProviderServiceArea.find({ providerId, isActive: true });
-  if (areas.length === 0) return false;
-  return areas.some((area) => addressMatchesServiceArea(address, area));
+  if (areas.length > 0) {
+    return areas.some((area) => addressMatchesServiceArea(address, area));
+  }
+
+  // Providers without configured service areas still match by proximity to their live location.
+  const presence = await ProviderPresence.findOne({ providerId }).select('currentLocation');
+  const addressCoords = address.location?.coordinates;
+  const providerCoords = presence?.currentLocation?.coordinates;
+  if (!addressCoords?.length || !providerCoords?.length) {
+    return Boolean(address.postalCode?.trim());
+  }
+
+  const [aLng, aLat] = addressCoords;
+  const [pLng, pLat] = providerCoords;
+  const fallbackRadiusKm = 15;
+  return distanceKm(aLat, aLng, pLat, pLng) <= fallbackRadiusKm;
 }
 
 export async function adminListProviderServiceAreas(providerId: string) {
