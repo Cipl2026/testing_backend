@@ -276,7 +276,7 @@ export async function registerRequestOtp(
   input: RegisterRequestInput,
 ): Promise<{ requestId: string; otp?: string }> {
   const phone = normalizePhone(input.phone);
-  const role = UserRole.CUSTOMER;
+  const role = input.role as UserRole.CUSTOMER | UserRole.PROVIDER;
 
   const existing = await User.findOne({ phone, role });
   if (existing) {
@@ -297,7 +297,8 @@ export async function registerRequestOtp(
     role,
     fullName: input.fullName?.trim(),
     email: input.email?.trim().toLowerCase(),
-    referralCode: input.referralCode?.trim().toUpperCase(),
+    referralCode:
+      role === UserRole.CUSTOMER ? input.referralCode?.trim().toUpperCase() : undefined,
     mpinHash,
     expiresAt: new Date(Date.now() + env.otp.expiryMinutes * 60 * 1000),
   });
@@ -307,7 +308,7 @@ export async function registerRequestOtp(
 
 export async function registerVerifyOtp(input: RegisterVerifyInput) {
   const phone = normalizePhone(input.phone);
-  const role = UserRole.CUSTOMER;
+  const role = input.role as UserRole.CUSTOMER | UserRole.PROVIDER;
 
   const existing = await User.findOne({ phone, role });
   if (existing) {
@@ -373,31 +374,51 @@ export async function registerVerifyOtp(input: RegisterVerifyInput) {
     status: 'ACTIVE',
   });
 
-  const profile = await CustomerProfile.create({
-    userId: user._id,
-    fullName: intent.fullName,
-    email: intent.email,
-  });
-
   await RegistrationIntent.deleteOne({ _id: intent._id });
 
-  if (intent.referralCode) {
-    try {
-      const growthService = await import('@/modules/discovery-growth/growth.service.js');
-      await growthService.redeemReferralCode(user._id.toString(), intent.referralCode);
-    } catch (error) {
-      logger.warn('Referral code not applied during registration', {
-        userId: user._id.toString(),
-        referralCode: intent.referralCode,
-        error: error instanceof Error ? error.message : String(error),
-      });
+  if (role === UserRole.CUSTOMER) {
+    const profile = await CustomerProfile.create({
+      userId: user._id,
+      fullName: intent.fullName,
+      email: intent.email,
+    });
+
+    if (intent.referralCode) {
+      try {
+        const growthService = await import('@/modules/discovery-growth/growth.service.js');
+        await growthService.redeemReferralCode(user._id.toString(), intent.referralCode);
+      } catch (error) {
+        logger.warn('Referral code not applied during registration', {
+          userId: user._id.toString(),
+          referralCode: intent.referralCode,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
+
+    const tokens = await issueTokens(user._id.toString(), user.role);
+    return {
+      user: await serializeCustomerUser(user, profile),
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      isNewUser: true,
+      requiresProfileCompletion: true,
+    };
   }
 
+  await ProviderProfile.create({
+    userId: user._id,
+    providerStatus: ProviderStatus.PENDING,
+    isProfileComplete: false,
+    isVerified: false,
+    languages: [],
+  });
+
   const tokens = await issueTokens(user._id.toString(), user.role);
+  const profile = await ProviderProfile.findOne({ userId: user._id });
 
   return {
-    user: await serializeCustomerUser(user, profile),
+    user: serializeUser(user, profile),
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
     isNewUser: true,
@@ -407,7 +428,7 @@ export async function registerVerifyOtp(input: RegisterVerifyInput) {
 
 export async function loginWithMpin(input: MpinLoginInput) {
   const phone = normalizePhone(input.phone);
-  const role = UserRole.CUSTOMER;
+  const role = input.role as UserRole.CUSTOMER | UserRole.PROVIDER;
 
   const user = await User.findOne({ phone, role }).select('+passwordHash');
   if (!user) {
@@ -439,10 +460,31 @@ export async function loginWithMpin(input: MpinLoginInput) {
   }
 
   const tokens = await issueTokens(user._id.toString(), user.role);
-  const profile = await CustomerProfile.findOne({ userId: user._id });
+
+  if (role === UserRole.CUSTOMER) {
+    const profile = await CustomerProfile.findOne({ userId: user._id });
+    return {
+      user: await serializeCustomerUser(user, profile),
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      isNewUser: false,
+      requiresProfileCompletion: !user.isProfileComplete,
+    };
+  }
+
+  let profile = await ProviderProfile.findOne({ userId: user._id });
+  if (!profile) {
+    profile = await ProviderProfile.create({
+      userId: user._id,
+      providerStatus: ProviderStatus.PENDING,
+      isProfileComplete: false,
+      isVerified: false,
+      languages: [],
+    });
+  }
 
   return {
-    user: await serializeCustomerUser(user, profile),
+    user: serializeUser(user, profile),
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
     isNewUser: false,
@@ -477,7 +519,7 @@ export async function resetMpinRequestOtp(
   input: ResetMpinRequestInput,
 ): Promise<{ requestId: string; otp?: string }> {
   const phone = normalizePhone(input.phone);
-  const role = UserRole.CUSTOMER;
+  const role = input.role as UserRole.CUSTOMER | UserRole.PROVIDER;
 
   const user = await User.findOne({ phone, role });
   if (!user) {
@@ -497,7 +539,7 @@ export async function resetMpinRequestOtp(
 
 export async function resetMpinConfirm(input: ResetMpinConfirmInput) {
   const phone = normalizePhone(input.phone);
-  const role = UserRole.CUSTOMER;
+  const role = input.role as UserRole.CUSTOMER | UserRole.PROVIDER;
 
   await validateAndConsumeOtp(phone, role, input.otp);
 
@@ -519,10 +561,21 @@ export async function resetMpinConfirm(input: ResetMpinConfirmInput) {
   await user.save();
 
   const tokens = await issueTokens(user._id.toString(), user.role);
-  const profile = await CustomerProfile.findOne({ userId: user._id });
 
+  if (role === UserRole.CUSTOMER) {
+    const profile = await CustomerProfile.findOne({ userId: user._id });
+    return {
+      user: await serializeCustomerUser(user, profile),
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      isNewUser: false,
+      requiresProfileCompletion: !user.isProfileComplete,
+    };
+  }
+
+  const profile = await ProviderProfile.findOne({ userId: user._id });
   return {
-    user: await serializeCustomerUser(user, profile),
+    user: serializeUser(user, profile),
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
     isNewUser: false,

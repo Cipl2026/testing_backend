@@ -65,7 +65,7 @@ const mpinSchema = z.string().regex(/^\d{4}$/, 'MPIN must be 4 digits');
 
 export const registerRequestSchema = z.object({
   phone: z.string().min(10, 'Phone number is required'),
-  role: z.literal('CUSTOMER'),
+  role: mobileRoleSchema,
   fullName: z.string().trim().min(2, 'Full name must be at least 2 characters').optional(),
   email: z.string().email('Invalid email address').optional(),
   referralCode: z.string().trim().min(4, 'Referral code is too short').max(20).optional(),
@@ -75,25 +75,25 @@ export const registerRequestSchema = z.object({
 export const registerVerifySchema = z.object({
   phone: z.string().min(10, 'Phone number is required'),
   otp: z.string().regex(/^\d{6}$/, 'OTP must be 6 digits'),
-  role: z.literal('CUSTOMER'),
+  role: mobileRoleSchema,
 });
 
 export const mpinLoginSchema = z.object({
   phone: z.string().min(10, 'Phone number is required'),
   mpin: mpinSchema,
-  role: z.literal('CUSTOMER'),
+  role: mobileRoleSchema,
 });
 
 export const resetMpinRequestSchema = z.object({
   phone: z.string().min(10, 'Phone number is required'),
-  role: z.literal('CUSTOMER'),
+  role: mobileRoleSchema,
 });
 
 export const resetMpinConfirmSchema = z.object({
   phone: z.string().min(10, 'Phone number is required'),
   otp: z.string().regex(/^\d{6}$/, 'OTP must be 6 digits'),
   mpin: mpinSchema,
-  role: z.literal('CUSTOMER'),
+  role: mobileRoleSchema,
 });
 
 export type RequestOtpInput = z.infer<typeof requestOtpSchema>;
