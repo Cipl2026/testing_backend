@@ -1,4 +1,4 @@
-import { ProviderServiceApprovalStatus, ProviderStatus } from '@ghaarfix/shared-types';
+import { ProviderStatus } from '@ghaarfix/shared-types';
 import { ProviderProfile } from '@/models/ProviderProfile.js';
 import { ProviderService } from '@/models/ProviderService.js';
 import { ProviderServiceArea } from '@/models/ProviderServiceArea.js';
@@ -10,12 +10,11 @@ function countEnabledDays(schedule: Awaited<ReturnType<typeof getProviderSchedul
 }
 
 export async function getProviderOnboardingStatus(providerId: string) {
-  const [profile, approvedServices, serviceAreas, schedule] = await Promise.all([
+  const [profile, activeServices, serviceAreas, schedule] = await Promise.all([
     ProviderProfile.findOne({ userId: providerId }),
     ProviderService.countDocuments({
       providerId,
       isActive: true,
-      approvalStatus: ProviderServiceApprovalStatus.APPROVED,
     }),
     ProviderServiceArea.countDocuments({ providerId, isActive: true }),
     getProviderScheduleDocument(providerId),
@@ -23,7 +22,7 @@ export async function getProviderOnboardingStatus(providerId: string) {
 
   const steps = {
     profile: Boolean(profile?.isProfileComplete),
-    services: approvedServices > 0,
+    services: activeServices > 0,
     serviceAreas: serviceAreas > 0,
     availability: countEnabledDays(schedule) > 0,
     verification: Boolean(profile?.isVerified),

@@ -1,5 +1,6 @@
-import { ProviderStatus, UserRole, ErrorCode } from '@ghaarfix/shared-types';
+import { ProviderStatus, UserRole, ErrorCode, ProviderServiceApprovalStatus } from '@ghaarfix/shared-types';
 import { ProviderProfile } from '@/models/ProviderProfile.js';
+import { ProviderService } from '@/models/ProviderService.js';
 import { User } from '@/models/User.js';
 import { AppError } from '@/utils/AppError.js';
 import { serializeUser } from '@/utils/serializers.js';
@@ -54,6 +55,13 @@ export async function updateProviderProfile(userId: string, input: ProviderProfi
   profile.isProfileComplete = isComplete;
   profile.providerStatus = ProviderStatus.PENDING;
   await profile.save();
+
+  if (isComplete) {
+    await ProviderService.updateMany(
+      { providerId: user._id, approvalStatus: ProviderServiceApprovalStatus.PENDING },
+      { approvalStatus: ProviderServiceApprovalStatus.APPROVED, rejectionReason: undefined },
+    );
+  }
 
   user.fullName = profile.fullName;
   user.email = profile.email;

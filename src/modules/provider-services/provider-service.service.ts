@@ -1,4 +1,5 @@
-import { ErrorCode, ProviderServiceApprovalStatus } from '@ghaarfix/shared-types';
+import { ErrorCode, ProviderServiceApprovalStatus, ProviderStatus } from '@ghaarfix/shared-types';
+import { ProviderProfile } from '@/models/ProviderProfile.js';
 import { ProviderService } from '@/models/ProviderService.js';
 import { Service } from '@/models/Service.js';
 import { User } from '@/models/User.js';
@@ -36,13 +37,22 @@ export async function createProviderService(
   if (duplicate) {
     return serializeProviderService(duplicate, { service });
   }
+
+  const profile = await ProviderProfile.findOne({ userId: providerId });
+  const autoApprove =
+    Boolean(profile?.isVerified) ||
+    profile?.providerStatus === ProviderStatus.ACTIVE ||
+    Boolean(profile?.isProfileComplete);
+
   const record = await ProviderService.create({
     providerId,
     serviceId: input.serviceId,
     experienceYears: input.experienceYears,
     description: input.description,
     customPricing: input.customPricing ?? { enabled: false },
-    approvalStatus: ProviderServiceApprovalStatus.PENDING,
+    approvalStatus: autoApprove
+      ? ProviderServiceApprovalStatus.APPROVED
+      : ProviderServiceApprovalStatus.PENDING,
     isActive: true,
   });
   return serializeProviderService(record, { service });
