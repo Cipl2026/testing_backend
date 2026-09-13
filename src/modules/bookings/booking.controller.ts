@@ -1,4 +1,5 @@
 import * as bookingAdminService from '@/modules/bookings/booking-admin.service.js';
+import * as bookingChatService from '@/modules/bookings/booking-chat.service.js';
 import * as bookingProviderService from '@/modules/bookings/booking-provider.service.js';
 import * as bookingService from '@/modules/bookings/booking.service.js';
 import { confirmProviderBooking, requestReplacementForMissedConfirmation } from '@/modules/bookings/provider-confirmation.service.js';
@@ -91,6 +92,36 @@ export const requestReplacement = asyncHandler(async (req, res) => {
     String(req.params.bookingId),
   );
   sendSuccess(res, 'Replacement professional assigned.', booking);
+});
+
+export const listBookingMessages = asyncHandler(async (req, res) => {
+  const result = await bookingChatService.listBookingMessages(
+    req.auth!.userId,
+    req.auth!.role,
+    String(req.params.bookingId),
+    req.query as never,
+  );
+  sendSuccess(res, 'Messages fetched successfully', { items: result.items }, 200, result.meta);
+});
+
+export const sendBookingMessage = asyncHandler(async (req, res) => {
+  const message = await bookingChatService.sendBookingMessage(
+    req.auth!.userId,
+    req.auth!.role,
+    String(req.params.bookingId),
+    req.body.body,
+  );
+  sendSuccess(res, 'Message sent successfully', message, 201);
+});
+
+export const unsendBookingMessage = asyncHandler(async (req, res) => {
+  const message = await bookingChatService.unsendBookingMessage(
+    req.auth!.userId,
+    req.auth!.role,
+    String(req.params.bookingId),
+    String(req.params.messageId),
+  );
+  sendSuccess(res, 'Message removed successfully', message);
 });
 
 export const listProviderBookings = asyncHandler(async (req, res) => {

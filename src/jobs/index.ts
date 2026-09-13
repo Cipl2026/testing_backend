@@ -124,7 +124,7 @@ export function registerJobs(): void {
 
     purgeExpiredChatMessages()
       .then((result) => {
-        if (result.supportTickets > 0 || result.assistant > 0) {
+        if (result.supportTickets > 0 || result.assistant > 0 || result.bookingMessages > 0) {
           logger.info('Purged expired chat messages', result);
         }
       })

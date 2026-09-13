@@ -121,3 +121,11 @@ export function emitAvailabilityChanged(
 export function emitReviewCreated(providerId: string, payload: unknown): void {
   emitToProvider(providerId, 'review:created', payload);
 }
+
+export function emitBookingChatMessage(bookingId: string, payload: unknown): void {
+  io?.to(`booking-chat:${bookingId}`).emit('booking-chat:message', payload);
+}
+
+export function emitBookingChatMessageDeleted(bookingId: string, payload: unknown): void {
+  io?.to(`booking-chat:${bookingId}`).emit('booking-chat:message-deleted', payload);
+}

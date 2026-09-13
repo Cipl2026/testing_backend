@@ -1,3 +1,4 @@
+import { BookingMessage } from '@/models/BookingMessage.js';
 import { AssistantConversation, AssistantMessage } from '@/models/Intelligence.js';
 import { SupportTicket } from '@/models/SupportTicket.js';
 import { getChatRetentionCutoffDate } from '@/utils/chatRetention.js';
@@ -22,13 +23,21 @@ export async function purgeExpiredAssistantMessages(): Promise<number> {
   return (messageResult.deletedCount ?? 0) + (conversationResult.deletedCount ?? 0);
 }
 
+export async function purgeExpiredBookingMessages(): Promise<number> {
+  const cutoff = getChatRetentionCutoffDate();
+  const result = await BookingMessage.deleteMany({ createdAt: { $lt: cutoff } });
+  return result.deletedCount ?? 0;
+}
+
 export async function purgeExpiredChatMessages(): Promise<{
   supportTickets: number;
   assistant: number;
+  bookingMessages: number;
 }> {
-  const [supportTickets, assistant] = await Promise.all([
+  const [supportTickets, assistant, bookingMessages] = await Promise.all([
     purgeExpiredSupportTicketMessages(),
     purgeExpiredAssistantMessages(),
+    purgeExpiredBookingMessages(),
   ]);
-  return { supportTickets, assistant };
+  return { supportTickets, assistant, bookingMessages };
 }

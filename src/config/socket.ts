@@ -4,6 +4,7 @@ import { UserRole } from '@ghaarfix/shared-types';
 import { env } from '@/config/env.js';
 import { isRedisEnabled, getRedisClient } from '@/infra/redis.js';
 import { setSocketServer } from '@/modules/realtime/socket.service.js';
+import { authorizeBookingChatJoin } from '@/modules/bookings/booking-chat.service.js';
 import { verifyAccessToken } from '@/utils/jwt.js';
 import { logger } from '@/utils/logger.js';
 
@@ -67,6 +68,18 @@ export function attachSocketServer(httpServer: HttpServer): SocketIOServer {
     socket.on('unwatch:availability', (payload: { providerId?: string; date?: string }) => {
       if (!payload?.providerId || !payload?.date) return;
       void socket.leave(`availability:${payload.providerId}:${payload.date}`);
+    });
+
+    socket.on('booking-chat:join', (payload: { bookingId?: string }) => {
+      if (!payload?.bookingId) return;
+      void authorizeBookingChatJoin(payload.bookingId, userId, role).then((allowed) => {
+        if (allowed) void socket.join(`booking-chat:${payload.bookingId}`);
+      });
+    });
+
+    socket.on('booking-chat:leave', (payload: { bookingId?: string }) => {
+      if (!payload?.bookingId) return;
+      void socket.leave(`booking-chat:${payload.bookingId}`);
     });
   });
 

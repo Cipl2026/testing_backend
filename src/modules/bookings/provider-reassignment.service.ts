@@ -201,6 +201,12 @@ export async function assignBackupProviderForConfirmedBooking(
     action: 'PROVIDER_REPLACED',
   });
 
+  emitToProvider(previousProviderId, 'booking:status-changed', {
+    bookingId: booking._id.toString(),
+    status: booking.status,
+    action: 'CUSTOMER_REASSIGNED',
+  });
+
   void enqueuePushNotification({
     audience: 'provider',
     targetId: newProviderId,

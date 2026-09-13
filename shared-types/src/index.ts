@@ -71,3 +71,4 @@ export * from './globalization.js';
 export * from './booking-pricing.js';
 export * from './provider-settlement.js';
 export * from './realtime.js';
+export * from './booking-chat.js';

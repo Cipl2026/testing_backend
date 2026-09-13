@@ -7,6 +7,9 @@ import { validateBody, validateParams, validateQuery } from '@/middleware/valida
 import {
   bookingIdParamSchema,
   bookingListQuerySchema,
+  bookingMessageIdParamSchema,
+  bookingMessagesQuerySchema,
+  addBookingMessageBodySchema,
   cancelBookingBodySchema,
   createBookingBodySchema,
   findAnotherProviderBodySchema,
@@ -137,6 +140,30 @@ router.post(
   validateParams(bookingIdParamSchema),
   validateBody(guestRecipientBodySchema),
   participantController.setGuestRecipient,
+);
+
+router.get(
+  '/:bookingId/messages',
+  authenticate,
+  authorize(UserRole.CUSTOMER),
+  validateParams(bookingIdParamSchema),
+  validateQuery(bookingMessagesQuerySchema),
+  bookingController.listBookingMessages,
+);
+router.post(
+  '/:bookingId/messages',
+  authenticate,
+  authorize(UserRole.CUSTOMER),
+  validateParams(bookingIdParamSchema),
+  validateBody(addBookingMessageBodySchema),
+  bookingController.sendBookingMessage,
+);
+router.delete(
+  '/:bookingId/messages/:messageId',
+  authenticate,
+  authorize(UserRole.CUSTOMER),
+  validateParams(bookingMessageIdParamSchema),
+  bookingController.unsendBookingMessage,
 );
 
 export default router;

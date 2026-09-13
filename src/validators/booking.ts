@@ -84,4 +84,17 @@ export const findAnotherProviderBodySchema = z.object({
 
 export const bookingIdParamSchema = z.object({ bookingId: objectIdSchema });
 
+export const bookingMessageIdParamSchema = z.object({
+  bookingId: objectIdSchema,
+  messageId: objectIdSchema,
+});
+
+export const addBookingMessageBodySchema = z.object({
+  body: z.string().trim().min(1).max(2000),
+});
+
+export const bookingMessagesQuerySchema = paginationQuerySchema.extend({
+  since: z.string().datetime().optional(),
+});
+
 export type CreateBookingBody = z.infer<typeof createBookingBodySchema>;

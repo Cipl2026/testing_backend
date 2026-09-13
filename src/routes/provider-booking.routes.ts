@@ -9,6 +9,9 @@ import { objectIdParamSchema } from '@/validators/catalog.js';
 import {
   bookingIdParamSchema,
   bookingListQuerySchema,
+  bookingMessageIdParamSchema,
+  bookingMessagesQuerySchema,
+  addBookingMessageBodySchema,
   cancelBookingBodySchema,
   completeServiceBodySchema,
   priceChangeRequestBodySchema,
@@ -161,6 +164,30 @@ router.post(
   validateParams(bookingIdParamSchema),
   validateBody(priceChangeRequestBodySchema),
   bookingController.requestPriceChange,
+);
+
+router.get(
+  '/bookings/:bookingId/messages',
+  authenticate,
+  authorize(UserRole.PROVIDER),
+  validateParams(bookingIdParamSchema),
+  validateQuery(bookingMessagesQuerySchema),
+  bookingController.listBookingMessages,
+);
+router.post(
+  '/bookings/:bookingId/messages',
+  authenticate,
+  authorize(UserRole.PROVIDER),
+  validateParams(bookingIdParamSchema),
+  validateBody(addBookingMessageBodySchema),
+  bookingController.sendBookingMessage,
+);
+router.delete(
+  '/bookings/:bookingId/messages/:messageId',
+  authenticate,
+  authorize(UserRole.PROVIDER),
+  validateParams(bookingMessageIdParamSchema),
+  bookingController.unsendBookingMessage,
 );
 
 export default router;

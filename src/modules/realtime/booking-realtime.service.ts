@@ -42,6 +42,7 @@ export function broadcastBookingRealtimeUpdate(
 
   if (targets.providerId) {
     emitToProvider(targets.providerId, 'booking:status-changed', envelope);
+    emitToProvider(targets.providerId, 'booking:updated', envelope);
 
     if (
       payload.action === 'BOOKING_REQUESTED' ||

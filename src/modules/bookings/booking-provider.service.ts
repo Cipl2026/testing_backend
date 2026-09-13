@@ -13,6 +13,7 @@ import {
 } from '@ghaarfix/shared-types';
 import { Booking } from '@/models/Booking.js';
 import { PriceChangeRequest } from '@/models/PriceChangeRequest.js';
+import { Review } from '@/models/Review.js';
 import { RescheduleRequest } from '@/models/RescheduleRequest.js';
 import { transitionBookingStatus } from '@/modules/bookings/booking-status.service.js';
 import { addTimelineEvent, listTimelineEvents } from '@/modules/bookings/timeline.service.js';
@@ -47,6 +48,7 @@ import { WorkOrder, SLATracker } from '@/models/OrganizationOperations.js';
 import { AIAnalysisResult } from '@/models/Intelligence.js';
 import { AIAnalysisStatus, IntelligenceFeature } from '@ghaarfix/shared-types';
 import { ManagedProperty, PropertyUnit } from '@/models/ManagedProperty.js';
+import { seedBookingChatWelcomeMessage } from '@/modules/bookings/booking-chat.service.js';
 import { serializeBookingDetail, serializeBookingSummary } from '@/utils/bookingSerializers.js';
 import { calculateJobPricing } from '@/modules/bookings/booking-pricing.service.js';
 import { buildPaginationMeta } from '@/utils/catalog.js';
@@ -138,10 +140,48 @@ export async function getProviderBooking(providerId: string, bookingId: string) 
       }
     : undefined;
 
+  const pendingPriceChange = await PriceChangeRequest.findOne({
+    bookingId,
+    status: PriceChangeStatus.PENDING,
+  });
+
+  const checklist = await getOrCreateChecklistForService(booking.serviceId.toString());
+  const requiresBeforeEvidence = checklist.requiredEvidence.includes(ServiceEvidenceType.BEFORE);
+
+  const reviewDoc = await Review.findOne({ bookingId, providerId }).select(
+    'rating comment createdAt',
+  );
+
   return serializeBookingDetail(booking, await listTimelineEvents(bookingId), {
     serviceRecipient,
     workOrder: workOrderContext,
     intelligenceSummary,
+    providerConfirmation: booking.providerConfirmation
+      ? {
+          status: booking.providerConfirmation.status,
+          confirmedAt: booking.providerConfirmation.confirmedAt?.toISOString(),
+        }
+      : undefined,
+    priceChangeRequest: pendingPriceChange
+      ? {
+          id: pendingPriceChange._id.toString(),
+          originalAmount: pendingPriceChange.originalAmount,
+          proposedAmount: pendingPriceChange.proposedAmount,
+          difference: pendingPriceChange.difference,
+          reason: pendingPriceChange.reason,
+          items: pendingPriceChange.items,
+          status: pendingPriceChange.status,
+          createdAt: pendingPriceChange.createdAt.toISOString(),
+        }
+      : undefined,
+    requiresBeforeEvidence,
+    review: reviewDoc
+      ? {
+          rating: reviewDoc.rating,
+          comment: reviewDoc.comment,
+          createdAt: reviewDoc.createdAt.toISOString(),
+        }
+      : undefined,
   }, 'provider');
 }
 
@@ -245,6 +285,12 @@ export async function acceptBooking(providerId: string, bookingId: string) {
       customerId: booking.customerId.toString(),
       providerId,
     },
+  );
+
+  await seedBookingChatWelcomeMessage(
+    bookingId,
+    providerId,
+    booking.providerSnapshot.fullName ?? 'Your professional',
   );
 
   return serializeBookingSummary(booking, 'provider');
@@ -622,6 +668,20 @@ export async function requestReschedule(
     bookingId,
   );
 
+  broadcastBookingRealtimeUpdate(
+    {
+      bookingId,
+      status: booking.status,
+      action: 'RESCHEDULE_REQUESTED',
+      providerId,
+      customerId: booking.customerId.toString(),
+    },
+    {
+      customerId: booking.customerId.toString(),
+      providerId,
+    },
+  );
+
   return serializeBookingSummary(booking, 'provider');
 }
 
@@ -670,6 +730,20 @@ export async function respondToReschedule(customerId: string, bookingId: string,
     });
   }
 
+  broadcastBookingRealtimeUpdate(
+    {
+      bookingId,
+      status: booking.status,
+      action: 'UPDATED',
+      providerId: booking.providerId.toString(),
+      customerId,
+    },
+    {
+      customerId,
+      providerId: booking.providerId.toString(),
+    },
+  );
+
   return serializeBookingDetail(booking, await listTimelineEvents(bookingId), undefined, 'provider');
 }
 
@@ -715,6 +789,20 @@ export async function requestPriceChange(
     'Price update requested',
     'Your professional requested a price adjustment.',
     bookingId,
+  );
+
+  broadcastBookingRealtimeUpdate(
+    {
+      bookingId,
+      status: booking.status,
+      action: 'PRICE_CHANGE_REQUESTED',
+      providerId,
+      customerId: booking.customerId.toString(),
+    },
+    {
+      customerId: booking.customerId.toString(),
+      providerId,
+    },
   );
 
   return record;
@@ -769,6 +857,20 @@ export async function respondToPriceChange(customerId: string, bookingId: string
       bookingId,
     );
   }
+
+  broadcastBookingRealtimeUpdate(
+    {
+      bookingId,
+      status: booking.status,
+      action: 'UPDATED',
+      providerId: booking.providerId.toString(),
+      customerId,
+    },
+    {
+      customerId,
+      providerId: booking.providerId.toString(),
+    },
+  );
 
   return serializeBookingDetail(booking, await listTimelineEvents(bookingId), {
     priceChangeRequest: request,
