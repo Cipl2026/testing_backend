@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { UserRole } from '@ghaarfix/shared-types';
 import * as authService from '@/modules/auth/auth.service.js';
 import { asyncHandler } from '@/utils/asyncHandler.js';
 import { sendSuccess } from '@/utils/apiResponse.js';
@@ -30,7 +31,10 @@ export const loginWithMpin = asyncHandler(async (req: Request, res: Response) =>
 
 export const checkPhone = asyncHandler(async (req: Request, res: Response) => {
   const phone = typeof req.query.phone === 'string' ? req.query.phone : '';
-  const result = await authService.checkPhoneRegistered(phone);
+  const roleParam = typeof req.query.role === 'string' ? req.query.role : UserRole.CUSTOMER;
+  const role =
+    roleParam === UserRole.PROVIDER ? UserRole.PROVIDER : UserRole.CUSTOMER;
+  const result = await authService.checkPhoneRegistered(phone, role);
   sendSuccess(res, 'Phone status fetched', result);
 });
 

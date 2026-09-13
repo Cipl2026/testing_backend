@@ -450,11 +450,27 @@ export async function loginWithMpin(input: MpinLoginInput) {
   };
 }
 
-export async function checkPhoneRegistered(phone: string): Promise<{ canProceed: boolean }> {
-  if (!phone || phone.trim().length < 10) {
-    return { canProceed: false };
+export async function checkPhoneRegistered(
+  phone: string,
+  role: UserRole.CUSTOMER | UserRole.PROVIDER = UserRole.CUSTOMER,
+): Promise<{
+  registered: boolean;
+  profileComplete: boolean;
+  canProceed: boolean;
+  mpinSet: boolean;
+}> {
+  const normalized = normalizePhone(phone);
+  if (!normalized || normalized.length < 10) {
+    return { registered: false, profileComplete: false, canProceed: false, mpinSet: false };
   }
-  return { canProceed: true };
+
+  const user = await User.findOne({ phone: normalized, role }).select('+passwordHash');
+  return {
+    registered: Boolean(user),
+    profileComplete: Boolean(user?.isProfileComplete),
+    canProceed: true,
+    mpinSet: Boolean(user?.passwordHash),
+  };
 }
 
 export async function resetMpinRequestOtp(

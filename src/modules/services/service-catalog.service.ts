@@ -31,6 +31,8 @@ function buildServiceFilter(query: ServiceListQuery, activeOnly = true) {
   const filter: Record<string, unknown> = activeOnly ? { isActive: true } : {};
   if (query.categoryId) filter.categoryId = query.categoryId;
   if (query.subcategoryId) filter.subcategoryId = query.subcategoryId;
+  if (query.providerType) filter.providerType = query.providerType;
+  if (query.hourlyEligible !== undefined) filter.hourlyEligible = query.hourlyEligible;
   if (query.featured !== undefined) filter.isFeatured = query.featured;
   if (query.search) {
     const regex = new RegExp(escapeRegex(query.search), 'i');

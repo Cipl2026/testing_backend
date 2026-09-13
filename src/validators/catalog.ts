@@ -118,6 +118,11 @@ export const serviceListQuerySchema = paginationQuerySchema.extend({
   categoryId: objectIdSchema.optional(),
   subcategoryId: objectIdSchema.optional(),
   serviceZoneId: objectIdSchema.optional(),
+  providerType: z.nativeEnum(ServiceProviderType).optional(),
+  hourlyEligible: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === 'true')),
   featured: z
     .enum(['true', 'false'])
     .optional()
