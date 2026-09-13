@@ -6,6 +6,15 @@ export const quickServicesPayloadSchema = z
   .object({
     bookingMode: z.nativeEnum(QuickServicesBookingMode),
     photoUrls: z.array(z.string().min(1).max(2048)).max(3).optional(),
+    recurring: z
+      .object({
+        frequency: z.enum(['daily', 'weekly', 'monthly', 'custom']),
+        startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        preferredTime: z.string().regex(/^\d{2}:\d{2}$/),
+        endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        untilCancelled: z.boolean().optional(),
+      })
+      .optional(),
   })
   .optional();
 
@@ -27,6 +36,7 @@ export const homeHelpReservationBodySchema = homeHelpQuoteBodySchema.extend({
   addressId: z.string().min(1),
   startDateTime: z.string().datetime(),
   homeId: z.string().optional(),
+  paymentMethod: z.nativeEnum(PaymentMethod).optional(),
 });
 
 export const homeHelpInstantBodySchema = homeHelpQuoteBodySchema.extend({

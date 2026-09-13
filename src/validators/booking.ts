@@ -67,6 +67,12 @@ export const completeServiceBodySchema = z.object({
     .regex(/^\d{4}$/, 'Enter the 4-digit completion code from the customer'),
 });
 
+export const adminBookingListQuerySchema = paginationQuerySchema.extend({
+  status: z.string().optional(),
+  search: z.string().optional(),
+  source: z.enum(['HOME_HELP', 'QUICK_SERVICES', 'URGENT_FIX', 'SLOT_RESERVATION']).optional(),
+});
+
 export const bookingListQuerySchema = paginationQuerySchema.extend({
   status: z.string().optional(),
   tab: z.enum(['upcoming', 'past', 'completed', 'cancelled', 'requests', 'in_progress']).optional(),

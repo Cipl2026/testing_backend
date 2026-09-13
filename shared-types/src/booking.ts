@@ -119,6 +119,15 @@ export enum QuickServicesBookingMode {
 export interface QuickServicesSnapshot {
   bookingMode: QuickServicesBookingMode;
   photoUrls?: string[];
+  recurring?: QuickServicesRecurringSchedule;
+}
+
+export interface QuickServicesRecurringSchedule {
+  frequency: 'daily' | 'weekly' | 'monthly' | 'custom';
+  startDate: string;
+  preferredTime: string;
+  endDate?: string;
+  untilCancelled?: boolean;
 }
 
 export enum ServiceAreaType {

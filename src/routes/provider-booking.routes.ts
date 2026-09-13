@@ -16,6 +16,8 @@ import {
   rescheduleRequestBodySchema,
   startServiceBodySchema,
 } from '@/validators/booking.js';
+import * as recurringController from '@/modules/home-help/home-help-recurring.controller.js';
+import { paginationQuerySchema } from '@ghaarfix/validation';
 
 const router = Router();
 
@@ -38,6 +40,14 @@ router.get(
   authenticate,
   authorize(UserRole.PROVIDER),
   providerController.getEarnings,
+);
+
+router.get(
+  '/recurring-plans',
+  authenticate,
+  authorize(UserRole.PROVIDER),
+  validateQuery(paginationQuerySchema),
+  recurringController.listProviderPlans,
 );
 
 router.get(

@@ -25,7 +25,10 @@ import {
 import { providerIdParamSchema } from '@/validators/availability.js';
 import * as adminAvailabilityController from '@/modules/provider-availability/admin-availability.controller.js';
 import * as bookingController from '@/modules/bookings/booking.controller.js';
-import { bookingIdParamSchema, bookingListQuerySchema } from '@/validators/booking.js';
+import {
+  bookingIdParamSchema,
+  adminBookingListQuerySchema,
+} from '@/validators/booking.js';
 import {
   adminUrgentListQuerySchema,
   cancelUrgentBodySchema,
@@ -37,8 +40,14 @@ import {
   homeHelpCompatibilityConfigBodySchema,
   homeHelpPackageIdParamSchema,
 } from '@/validators/home-help-admin.js';
+import {
+  adminRecurringPlanListQuerySchema,
+  adminUpdateRecurringPlanBodySchema,
+  recurringPlanIdParamSchema,
+} from '@/validators/home-help-recurring.js';
 import * as urgentAdminController from '@/modules/urgent/urgent-admin.controller.js';
 import * as homeHelpAdminController from '@/modules/home-help/home-help-admin.controller.js';
+import * as recurringController from '@/modules/home-help/home-help-recurring.controller.js';
 import * as postServiceController from '@/modules/post-service/post-service.controller.js';
 import * as homeHealthController from '@/modules/home-health/home-health.controller.js';
 import {
@@ -412,7 +421,7 @@ router.get(
   '/bookings',
   authenticate,
   authorize(UserRole.ADMIN),
-  validateQuery(bookingListQuerySchema),
+  validateQuery(adminBookingListQuerySchema),
   bookingController.adminListBookings,
 );
 router.get(
@@ -2046,6 +2055,22 @@ router.patch(
   authorize(UserRole.ADMIN),
   validateBody(homeHelpCompatibilityConfigBodySchema),
   homeHelpAdminController.updateCompatibilityConfig,
+);
+
+router.get(
+  '/home-help/recurring-plans',
+  authenticate,
+  authorize(UserRole.ADMIN),
+  validateQuery(adminRecurringPlanListQuerySchema),
+  recurringController.adminListPlans,
+);
+router.patch(
+  '/home-help/recurring-plans/:planId',
+  authenticate,
+  authorize(UserRole.ADMIN),
+  validateParams(recurringPlanIdParamSchema),
+  validateBody(adminUpdateRecurringPlanBodySchema),
+  recurringController.adminUpdatePlan,
 );
 
 export default router;

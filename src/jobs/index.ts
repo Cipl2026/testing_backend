@@ -38,6 +38,7 @@ import { runPhase23Jobs } from '@/modules/performance/phase23-jobs.js';
 import { runPhase24Jobs } from '@/modules/globalization/phase24-jobs.js';
 import { logger } from '@/utils/logger.js';
 import { rebuildProviderGeoIndex } from '@/infra/provider-geo.service.js';
+import { runHomeHelpRecurringJobs } from '@/modules/home-help/home-help-recurring.jobs.js';
 
 let interval: ReturnType<typeof setInterval> | null = null;
 let phase10Initialized = false;
@@ -294,6 +295,14 @@ export function registerJobs(): void {
         if (sent > 0) logger.info('Sent review reminders', { count: sent });
       })
       .catch((error) => logger.error('Failed to send review reminders', { error }));
+
+    runHomeHelpRecurringJobs()
+      .then((result) => {
+        if (result.occurrences > 0) {
+          logger.info('Ran Home Help recurring jobs', result);
+        }
+      })
+      .catch((error) => logger.error('Failed to run Home Help recurring jobs', { error }));
   }, 60_000);
 
   if (!phase10Initialized) {

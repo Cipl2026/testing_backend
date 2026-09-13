@@ -11,9 +11,11 @@ export async function adminListBookings(query: {
   limit: number;
   status?: string;
   search?: string;
+  source?: string;
 }) {
   const filter: Record<string, unknown> = {};
   if (query.status) filter.status = query.status;
+  if (query.source) filter.source = query.source;
   if (query.search) {
     filter.$or = [
       { bookingNumber: { $regex: query.search, $options: 'i' } },

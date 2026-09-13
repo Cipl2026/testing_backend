@@ -21,6 +21,7 @@ import { UrgentRequest } from '@/models/UrgentRequest.js';
 import { customerCompletionOtp } from '@/modules/bookings/service-completion-otp.service.js';
 import { customerStartOtp } from '@/modules/bookings/service-start-otp.service.js';
 import { resolveBookingSource } from '@/modules/bookings/booking-source.util.js';
+import { linkRecurringPlanToConfirmedBooking } from '@/modules/home-help/home-help-recurring.service.js';
 import { BookingIdempotency } from '@/models/BookingIdempotency.js';
 import { BookingParticipant } from '@/models/BookingParticipant.js';
 import { CustomerAddress } from '@/models/CustomerAddress.js';
@@ -430,6 +431,13 @@ export async function createBookingFromReservation(
   );
 
   await seedDefaultParticipants(booking._id.toString(), customerId, homeId);
+
+  if (reservation.quickServices?.recurring || reservation.quickServices?.bookingMode === 'recurring') {
+    await linkRecurringPlanToConfirmedBooking({
+      reservationId: reservation._id.toString(),
+      bookingId: booking._id.toString(),
+    });
+  }
 
   const participantSummary = await getBookingParticipantSummary(booking._id.toString());
   const serialized = serializeBookingDetail(booking, await listTimelineEvents(booking._id.toString()), {
