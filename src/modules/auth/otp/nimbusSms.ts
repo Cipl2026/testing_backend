@@ -2,7 +2,7 @@ import axios from 'axios';
 import { env } from '@/config/env.js';
 import { logger } from '@/utils/logger.js';
 
-const NIMBUS_API_URL = 'http://nimbusit.net/api/pushsms';
+const NIMBUS_API_URLS = ['https://nimbusit.net/api/pushsms', 'http://nimbusit.net/api/pushsms'];
 
 function buildOtpMessageTemplate(): string {
   const minutes = env.otp.expiryMinutes;
@@ -29,25 +29,35 @@ export function isNimbusConfigured(): boolean {
 
 export async function sendNimbusSms(mobile: string, otp: string): Promise<unknown> {
   const message = buildOtpMessageTemplate().replace('{otp}', otp);
+  const params = {
+    user: env.nimbus.user,
+    authkey: env.nimbus.authKey,
+    sender: env.nimbus.sender,
+    mobile: toNimbusMobile(mobile),
+    text: message,
+    entityid: env.nimbus.entityId,
+    templateid: env.nimbus.templateId,
+    rpt: 1,
+  };
 
-  const response = await axios.get(NIMBUS_API_URL, {
-    params: {
-      user: env.nimbus.user,
-      authkey: env.nimbus.authKey,
-      sender: env.nimbus.sender,
-      mobile: toNimbusMobile(mobile),
-      text: message,
-      entityid: env.nimbus.entityId,
-      templateid: env.nimbus.templateId,
-      rpt: 1,
-    },
-    timeout: 15_000,
-  });
+  let lastError: unknown;
+  for (const url of NIMBUS_API_URLS) {
+    try {
+      const response = await axios.get(url, { params, timeout: 15_000 });
+      logger.info('Nimbus SMS API response', { mobile: toNimbusMobile(mobile), data: response.data });
+      assertGatewayAccepted(response.data);
+      return response.data;
+    } catch (error) {
+      lastError = error;
+      logger.warn('Nimbus SMS attempt failed', {
+        url,
+        mobile: toNimbusMobile(mobile),
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 
-  logger.info('Nimbus SMS API response', { mobile: toNimbusMobile(mobile), data: response.data });
-
-  assertGatewayAccepted(response.data);
-  return response.data;
+  throw lastError instanceof Error ? lastError : new Error('Failed to send OTP SMS');
 }
 
 /**

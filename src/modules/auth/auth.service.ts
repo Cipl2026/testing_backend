@@ -9,6 +9,7 @@ import { RegistrationIntent } from '@/models/RegistrationIntent.js';
 import { RefreshToken } from '@/models/RefreshToken.js';
 import { User } from '@/models/User.js';
 import { getOtpProvider } from '@/modules/auth/otp/otpProviderFactory.js';
+import type { OtpDeliveryResult } from '@/modules/auth/otp/IOtpProvider.js';
 import { AppError } from '@/utils/AppError.js';
 import { generateOtp, generateRequestId, hashOtp, hashToken, verifyOtpHash } from '@/utils/crypto.js';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '@/utils/jwt.js';
@@ -33,6 +34,38 @@ import type {
   ResetMpinRequestInput,
   VerifyOtpInput,
 } from '@/validators/auth.js';
+
+function buildOtpDeliveryResponse(
+  requestId: string,
+  otp: string,
+  delivery: OtpDeliveryResult,
+): { requestId: string; otp?: string } {
+  const response: { requestId: string; otp?: string } = { requestId };
+  const viaConsole = delivery.message?.toLowerCase().includes('console') ?? false;
+  if (env.otp.exposeInResponse || viaConsole) {
+    response.otp = otp;
+  }
+  return response;
+}
+
+async function deliverOtpOrExpose(
+  requestId: string,
+  phone: string,
+  otp: string,
+): Promise<{ requestId: string; otp?: string }> {
+  const provider = getOtpProvider();
+  const delivery = await provider.sendOtp(phone, otp);
+  if (delivery.success) {
+    return buildOtpDeliveryResponse(requestId, otp, delivery);
+  }
+
+  logger.error('OTP SMS delivery failed', { phone, message: delivery.message });
+  if (env.otp.exposeInResponse || env.otp.exposeOnSmsFailure) {
+    return { requestId, otp };
+  }
+
+  throw new AppError('Failed to send OTP. Please try again later.', 500, ErrorCode.INTERNAL_ERROR);
+}
 
 async function validateAndConsumeOtp(
   phone: string,
@@ -105,18 +138,7 @@ export async function requestOtp(input: RequestOtpInput): Promise<{ requestId: s
     lastSentAt: new Date(),
   });
 
-  const provider = getOtpProvider();
-  const delivery = await provider.sendOtp(phone, otp);
-  if (!delivery.success) {
-    throw new AppError('Failed to send OTP. Please try again later.', 500, ErrorCode.INTERNAL_ERROR);
-  }
-
-  const response: { requestId: string; otp?: string } = { requestId };
-  if (env.otp.exposeInResponse) {
-    response.otp = otp;
-  }
-
-  return response;
+  return deliverOtpOrExpose(requestId, phone, otp);
 }
 
 export async function verifyOtp(input: VerifyOtpInput) {
@@ -367,18 +389,7 @@ export async function registerResendOtp(
   intent.requestId = requestId;
   await intent.save();
 
-  const provider = getOtpProvider();
-  const delivery = await provider.sendOtp(phone, otp);
-  if (!delivery.success) {
-    throw new AppError('Failed to send OTP. Please try again later.', 500, ErrorCode.INTERNAL_ERROR);
-  }
-
-  const response: { requestId: string; otp?: string } = { requestId };
-  if (env.otp.exposeInResponse) {
-    response.otp = otp;
-  }
-
-  return response;
+  return deliverOtpOrExpose(requestId, phone, otp);
 }
 
 export async function registerVerifyOtp(input: RegisterVerifyInput) {

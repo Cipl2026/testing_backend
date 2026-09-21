@@ -83,7 +83,11 @@ async function findNearbyPresences(
     urgentAvailable: true,
     status: ProviderPresenceStatus.ONLINE,
     lastSeenAt: { $gte: stalePresenceCutoff },
-    locationUpdatedAt: { $gte: staleLocationCutoff },
+    currentLocation: { $exists: true },
+    $or: [
+      { locationUpdatedAt: { $gte: staleLocationCutoff } },
+      { locationUpdatedAt: { $exists: false } },
+    ],
   };
 
   const redisHits = await findNearbyProviderIds({

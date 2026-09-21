@@ -9,14 +9,16 @@ let provider: OtpProvider | null = null;
 
 export function getOtpProvider(): OtpProvider {
   if (!provider) {
-    if (env.isTest || !env.isProd) {
+    if (env.isTest) {
       provider = new ConsoleOtpProvider();
     } else if (isNimbusConfigured()) {
       provider = new SmsOtpProvider();
     } else {
-      logger.error(
-        'Nimbus SMS is not configured in production — OTP SMS cannot be delivered. Set NIMBUS_* env vars.',
-      );
+      if (env.isProd) {
+        logger.error(
+          'Nimbus SMS is not configured — OTP SMS cannot be delivered. Set NIMBUS_* env vars.',
+        );
+      }
       provider = new ConsoleOtpProvider();
     }
   }

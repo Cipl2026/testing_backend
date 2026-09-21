@@ -67,11 +67,25 @@ async function assertProviderCanGoOnline(providerId: string): Promise<void> {
 export async function setProviderOnline(providerId: string) {
   await assertProviderCanGoOnline(providerId);
   const presence = await getOrCreatePresence(providerId);
+  const profile = await ProviderProfile.findOne({ userId: providerId }).select('serviceBase');
   presence.status = ProviderPresenceStatus.ONLINE;
   presence.isOnline = true;
   presence.urgentAvailable = true;
   presence.lastSeenAt = new Date();
   presence.activeJobCount = await countActiveJobs(providerId);
+
+  if (
+    !presence.currentLocation?.coordinates?.length &&
+    profile?.serviceBase?.latitude != null &&
+    profile?.serviceBase?.longitude != null
+  ) {
+    presence.currentLocation = {
+      type: 'Point',
+      coordinates: [profile.serviceBase.longitude, profile.serviceBase.latitude],
+    };
+    presence.locationUpdatedAt = new Date();
+  }
+
   await presence.save();
   if (presence.currentLocation?.coordinates?.length === 2) {
     const [longitude, latitude] = presence.currentLocation.coordinates;

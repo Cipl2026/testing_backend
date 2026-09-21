@@ -27,6 +27,10 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .optional()
     .transform((v) => v === 'true'),
+  OTP_EXPOSE_ON_SMS_FAILURE: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => v === 'true'),
   OTP_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(5),
   ADMIN_EMAIL: z.string().email().optional(),
   ADMIN_PASSWORD: z.string().min(8).optional(),
@@ -157,7 +161,8 @@ function loadEnv() {
       expiryMinutes: data.OTP_EXPIRY_MINUTES,
       maxAttempts: data.OTP_MAX_ATTEMPTS,
       resendCooldownSeconds: data.OTP_RESEND_COOLDOWN_SECONDS,
-      exposeInResponse: (data.EXPOSE_OTP_IN_RESPONSE ?? false) && !isProd,
+      exposeInResponse: data.EXPOSE_OTP_IN_RESPONSE ?? false,
+      exposeOnSmsFailure: data.OTP_EXPOSE_ON_SMS_FAILURE ?? true,
       rateLimitMax: data.OTP_RATE_LIMIT_MAX,
     },
     admin: {

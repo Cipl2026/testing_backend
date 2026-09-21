@@ -28,6 +28,11 @@ export const getFeatured = asyncHandler(async (req, res) => {
   sendSuccess(res, 'Featured services fetched successfully', { items });
 });
 
+export const getUrgentServices = asyncHandler(async (req, res) => {
+  const items = await catalogService.getUrgentServices(req.auth?.userId);
+  sendSuccess(res, 'Urgent services fetched successfully', { items });
+});
+
 export const searchServices = asyncHandler(async (req, res) => {
   const result = await catalogService.searchServices(req.query as never, req.auth?.userId);
   sendSuccess(res, 'Search results fetched successfully', { items: result.items }, 200, result.meta);

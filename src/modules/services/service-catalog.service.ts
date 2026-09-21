@@ -82,6 +82,34 @@ export async function listServices(query: ServiceListQuery, customerId?: string)
   };
 }
 
+export async function getUrgentServices(customerId?: string) {
+  const services = await Service.find({
+    isActive: true,
+    isUrgentAvailable: true,
+    'urgentConfig.enabled': true,
+  })
+    .sort({ displayOrder: 1, name: 1 })
+    .limit(24);
+  const favoriteIds = customerId
+    ? new Set(
+        (
+          await FavoriteService.find({
+            customerId,
+            serviceId: { $in: services.map((s) => s._id) },
+          })
+        ).map((f) => f.serviceId.toString()),
+      )
+    : new Set<string>();
+  const categories = await Category.find({ _id: { $in: services.map((s) => s.categoryId) } });
+  const categoryMap = new Map(categories.map((c) => [c._id.toString(), c]));
+  return services.map((service) =>
+    serializeService(service, {
+      category: categoryMap.get(service.categoryId.toString()),
+      isFavorite: favoriteIds.has(service._id.toString()),
+    }),
+  );
+}
+
 export async function getFeaturedServices(customerId?: string) {
   const services = await Service.find({ isActive: true, isFeatured: true })
     .sort({ displayOrder: 1, name: 1 })

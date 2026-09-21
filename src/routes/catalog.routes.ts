@@ -23,6 +23,7 @@ router.get(
 );
 
 router.get('/services/featured', catalogController.getFeatured);
+router.get('/services/urgent', catalogController.getUrgentServices);
 router.get('/services/search', searchRateLimit, validateQuery(searchQuerySchema), catalogController.searchServices);
 router.get(
   '/services/recent',
