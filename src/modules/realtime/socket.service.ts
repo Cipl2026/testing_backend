@@ -55,7 +55,6 @@ export function emitUrgentNewRequest(providerId: string, payload: unknown): void
             : {},
         );
   emitToProvider(providerId, 'urgent:new-request', envelope);
-  emitToProvider(providerId, 'provider:new_job', envelope);
 }
 
 export function emitUrgentRequestClosed(providerId: string, payload: unknown): void {

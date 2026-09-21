@@ -14,10 +14,7 @@ import { processProviderConfirmationReminders } from '@/modules/bookings/provide
 import { expireStalePresence } from '@/modules/presence/presence.service.js';
 import { cleanupOldLocationHistory } from '@/modules/tracking/location-tracking.service.js';
 import { purgeExpiredChatMessages } from '@/modules/support/chat-retention.service.js';
-import {
-  backfillHomeOwners,
-  expirePendingInvitations,
-} from '@/modules/home-members/home-member.service.js';
+import {backfillHomeOwners, expirePendingInvitations,} from '@/modules/home-members/home-member.service.js';
 import { detectOperationalSignals } from '@/modules/provider-quality/operational-signal.service.js';
 import { aggregateAllProviderPerformance } from '@/modules/provider-quality/performance.service.js';
 import { expireVerifications } from '@/modules/provider-quality/verification.service.js';
@@ -40,10 +37,8 @@ import { backfillProviderUrgentFlags } from '@/modules/provider-services/provide
 import { logger } from '@/utils/logger.js';
 import { rebuildProviderGeoIndex } from '@/infra/provider-geo.service.js';
 import { runHomeHelpRecurringJobs } from '@/modules/home-help/home-help-recurring.jobs.js';
-
 let interval: ReturnType<typeof setInterval> | null = null;
 let phase10Initialized = false;
-
 export async function runStartupJobs(): Promise<void> {
   try {
     const count = await backfillHomeOwners();
@@ -51,7 +46,6 @@ export async function runStartupJobs(): Promise<void> {
   } catch (error) {
     logger.error('Failed to backfill home owners', { error });
   }
-
   try {
     const reviewReminderBackfill = await backfillReviewReminderSentFlags();
     if (reviewReminderBackfill > 0) {
@@ -62,7 +56,6 @@ export async function runStartupJobs(): Promise<void> {
   } catch (error) {
     logger.error('Failed to backfill review reminder flags', { error });
   }
-
   try {
     const indexed = await rebuildProviderGeoIndex();
     if (indexed > 0) {
@@ -71,7 +64,6 @@ export async function runStartupJobs(): Promise<void> {
   } catch (error) {
     logger.error('Failed to rebuild provider GEO index', { error });
   }
-
   try {
     const urgentFlagsUpdated = await backfillProviderUrgentFlags();
     if (urgentFlagsUpdated > 0) {
@@ -81,14 +73,12 @@ export async function runStartupJobs(): Promise<void> {
     logger.error('Failed to backfill provider urgent flags', { error });
   }
 }
-
 export function stopJobs(): void {
   if (interval) {
     clearInterval(interval);
     interval = null;
   }
 }
-
 export function registerJobs(): void {
   if (interval) return;
   interval = setInterval(() => {
@@ -97,31 +87,26 @@ export function registerJobs(): void {
         if (count > 0) logger.info('Expired provider booking requests', { count });
       })
       .catch((error) => logger.error('Failed to expire provider requests', { error }));
-
     expireUrgentRequests()
       .then((count) => {
         if (count > 0) logger.info('Expired urgent requests', { count });
       })
       .catch((error) => logger.error('Failed to expire urgent requests', { error }));
-
     expireStalePresence()
       .then((count) => {
         if (count > 0) logger.info('Expired stale provider presence', { count });
       })
       .catch((error) => logger.error('Failed to expire stale presence', { error }));
-
     processPendingInvoicePdfs()
       .then((count) => {
         if (count > 0) logger.info('Generated pending invoice PDFs', { count });
       })
       .catch((error) => logger.error('Failed to process invoice PDFs', { error }));
-
     cleanupOldLocationHistory()
       .then((count) => {
         if (count > 0) logger.info('Cleaned old location history', { count });
       })
       .catch((error) => logger.error('Failed to clean location history', { error }));
-
     purgeExpiredChatMessages()
       .then((result) => {
         if (result.supportTickets > 0 || result.assistant > 0 || result.bookingMessages > 0) {
@@ -129,31 +114,26 @@ export function registerJobs(): void {
         }
       })
       .catch((error) => logger.error('Failed to purge expired chat messages', { error }));
-
     refreshMaintenanceScheduleStatuses()
       .then((count) => {
         if (count > 0) logger.info('Refreshed maintenance schedule statuses', { count });
       })
       .catch((error) => logger.error('Failed to refresh maintenance statuses', { error }));
-
     processMaintenanceReminders()
       .then((count) => {
         if (count > 0) logger.info('Sent maintenance reminders', { count });
       })
       .catch((error) => logger.error('Failed to send maintenance reminders', { error }));
-
     processWarrantyAlerts()
       .then((count) => {
         if (count > 0) logger.info('Sent warranty alerts', { count });
       })
       .catch((error) => logger.error('Failed to send warranty alerts', { error }));
-
     expirePendingInvitations()
       .then((count) => {
         if (count > 0) logger.info('Expired home member invitations', { count });
       })
       .catch((error) => logger.error('Failed to expire home invitations', { error }));
-
     expireVerifications()
       .then((count) => {
         if (count > 0) logger.info('Expired provider verifications', { count });
@@ -165,13 +145,11 @@ export function registerJobs(): void {
         if (count > 0) logger.info('Aggregated provider performance metrics', { count });
       })
       .catch((error) => logger.error('Failed to aggregate provider performance', { error }));
-
     detectOperationalSignals()
       .then((count) => {
         if (count > 0) logger.info('Detected operational risk signals', { count });
       })
       .catch((error) => logger.error('Failed to detect operational signals', { error }));
-
     runPhase10Jobs()
       .then((result) => {
         if (result.recommendations > 0 || result.popularity > 0) {
@@ -179,7 +157,6 @@ export function registerJobs(): void {
         }
       })
       .catch((error) => logger.error('Failed to run Phase 10 jobs', { error }));
-
     runPhase11Jobs()
       .then((result) => {
         if (Object.values(result).some((v) => v > 0)) {
@@ -187,7 +164,6 @@ export function registerJobs(): void {
         }
       })
       .catch((error) => logger.error('Failed to run Phase 11 jobs', { error }));
-
     runPhase12Jobs()
       .then((result) => {
         if (Object.values(result).some((v) => v > 0)) {
@@ -195,7 +171,6 @@ export function registerJobs(): void {
         }
       })
       .catch((error) => logger.error('Failed to run Phase 12 jobs', { error }));
-
     runPhase13Jobs()
       .then((result) => {
         if (Object.values(result).some((v) => v > 0)) {
@@ -203,7 +178,6 @@ export function registerJobs(): void {
         }
       })
       .catch((error) => logger.error('Failed to run Phase 13 jobs', { error }));
-
     runPhase14Jobs()
       .then((result) => {
         if (Object.values(result).some((v) => v > 0)) {
@@ -211,7 +185,6 @@ export function registerJobs(): void {
         }
       })
       .catch((error) => logger.error('Failed to run Phase 14 jobs', { error }));
-
     runPhase15Jobs()
       .then((result) => {
         if (Object.values(result).some((v) => v > 0)) {
@@ -219,7 +192,6 @@ export function registerJobs(): void {
         }
       })
       .catch((error) => logger.error('Failed to run Phase 15 jobs', { error }));
-
     runPhase16Jobs()
       .then((result) => {
         if (Object.values(result).some((v) => v > 0)) {
@@ -227,7 +199,6 @@ export function registerJobs(): void {
         }
       })
       .catch((error) => logger.error('Failed to run Phase 16 jobs', { error }));
-
     runPhase17Jobs()
       .then((result) => {
         if (Object.values(result).some((v) => v > 0)) {
@@ -235,7 +206,6 @@ export function registerJobs(): void {
         }
       })
       .catch((error) => logger.error('Failed to run Phase 17 jobs', { error }));
-
     runPhase18Jobs()
       .then((result) => {
         if (Object.values(result).some((v) => v > 0)) {
@@ -243,7 +213,6 @@ export function registerJobs(): void {
         }
       })
       .catch((error) => logger.error('Failed to run Phase 18 jobs', { error }));
-
     runPhase19Jobs()
       .then((result) => {
         if (result.enabled && Object.values(result).some((v) => typeof v === 'number' && v > 0)) {
@@ -251,7 +220,6 @@ export function registerJobs(): void {
         }
       })
       .catch((error) => logger.error('Failed to run Phase 19 jobs', { error }));
-
     runPhase20Jobs()
       .then((result) => {
         if (result.enabled && Object.values(result).some((v) => typeof v === 'number' && v > 0)) {
@@ -259,7 +227,6 @@ export function registerJobs(): void {
         }
       })
       .catch((error) => logger.error('Failed to run Phase 20 jobs', { error }));
-
     runPhase21Jobs()
       .then((result) => {
         if (result.enabled && Object.values(result).some((v) => typeof v === 'number' && v > 0)) {
@@ -267,7 +234,6 @@ export function registerJobs(): void {
         }
       })
       .catch((error) => logger.error('Failed to run Phase 21 jobs', { error }));
-
     runPhase22Jobs()
       .then((result) => {
         if (result.enabled && Object.values(result).some((v) => typeof v === 'number' && v > 0)) {
@@ -275,7 +241,6 @@ export function registerJobs(): void {
         }
       })
       .catch((error) => logger.error('Failed to run Phase 22 jobs', { error }));
-
     runPhase23Jobs()
       .then((result) => {
         if (result.enabled && Object.values(result).some((v) => typeof v === 'number' && v > 0)) {
@@ -283,7 +248,6 @@ export function registerJobs(): void {
         }
       })
       .catch((error) => logger.error('Failed to run Phase 23 jobs', { error }));
-
     runPhase24Jobs()
       .then((result) => {
         if (result.enabled && result.regionsProcessed > 0) {
@@ -291,7 +255,6 @@ export function registerJobs(): void {
         }
       })
       .catch((error) => logger.error('Failed to run Phase 24 jobs', { error }));
-
     processProviderConfirmationReminders()
       .then((result) => {
         if (result.reminders24h + result.reminders2h + result.replacements > 0) {
@@ -299,13 +262,11 @@ export function registerJobs(): void {
         }
       })
       .catch((error) => logger.error('Failed to run provider confirmation jobs', { error }));
-
     processReviewReminders()
       .then(({ sent }) => {
         if (sent > 0) logger.info('Sent review reminders', { count: sent });
       })
       .catch((error) => logger.error('Failed to send review reminders', { error }));
-
     runHomeHelpRecurringJobs()
       .then((result) => {
         if (result.occurrences > 0) {
@@ -314,7 +275,6 @@ export function registerJobs(): void {
       })
       .catch((error) => logger.error('Failed to run Home Help recurring jobs', { error }));
   }, 60_000);
-
   if (!phase10Initialized) {
     phase10Initialized = true;
     runPhase10Jobs()
