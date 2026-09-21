@@ -47,5 +47,10 @@ export function customerCompletionOtp(booking: IBooking) {
 }
 
 export function emitServiceCompletionOtp(customerId: string, bookingId: string, otp: string) {
-  emitToCustomer(customerId, 'booking:service-otp', { bookingId, otp });
+  emitToCustomer(customerId, 'booking:service-otp', {
+    bookingId,
+    otp,
+    status: 'IN_PROGRESS',
+    kind: 'completion',
+  });
 }

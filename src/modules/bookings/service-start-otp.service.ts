@@ -57,5 +57,10 @@ export function customerStartOtp(booking: IBooking) {
 }
 
 export function emitServiceStartOtp(customerId: string, bookingId: string, otp: string) {
-  emitToCustomer(customerId, 'booking:start-otp', { bookingId, otp });
+  emitToCustomer(customerId, 'booking:start-otp', {
+    bookingId,
+    otp,
+    status: 'PROVIDER_ARRIVED',
+    kind: 'start',
+  });
 }
